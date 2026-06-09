@@ -1,0 +1,6 @@
+# Pharo image artifacts — the source of truth is the Tonel code under src/
+*.image
+*.changes
+*.sources
+pharo-local/
+*.ston
