@@ -582,22 +582,38 @@ GenieServer >> returnResultDo: aBlock [
 
 { #category : 'testing' }
 GenieServer >> runStructuredTestSuite: aSuite [
+
 	| details passed failed errored |
 	details := OrderedCollection new.
-	passed := 0. failed := 0. errored := 0.
-	aSuite tests do: [ :tc |
-		[ tc runCase. passed := passed + 1 ]
-			on: TestFailure, Error
-			do: [ :e |
-				| kind |
-				kind := (e isKindOf: TestFailure) ifTrue: [ 'failure' ] ifFalse: [ 'error' ].
-				kind = 'failure' ifTrue: [ failed := failed + 1 ] ifFalse: [ errored := errored + 1 ].
-				details add: {
-					'test' -> (tc class name asString, '>>', tc selector).
-					'kind' -> kind.
-					'message' -> (e messageText ifNil: [ e class name asString ]) } asDictionary ] ].
-	^ { 'passed' -> passed. 'failed' -> failed. 'errored' -> errored.
-	    'total' -> aSuite tests size. 'details' -> details asArray } asDictionary
+	passed := 0.
+	failed := 0.
+	errored := 0.
+	self suppressChangeLoggingDuring: [
+			aSuite tests do: [ :tc |
+					[
+						tc runCase.
+						passed := passed + 1 ]
+						on: TestFailure , Error
+						do: [ :e |
+								| kind |
+								kind := (e isKindOf: TestFailure)
+									        ifTrue: [ 'failure' ]
+									        ifFalse: [ 'error' ].
+								kind = 'failure'
+									ifTrue: [ failed := failed + 1 ]
+									ifFalse: [ errored := errored + 1 ].
+								details add: {
+										('test' -> (tc class name asString , '>>' , tc selector)).
+										('kind' -> kind).
+										('message'
+										 -> (e messageText ifNil: [ e class name asString ])) }
+										asDictionary ] ] ].
+	^ {
+		  ('passed' -> passed).
+		  ('failed' -> failed).
+		  ('errored' -> errored).
+		  ('total' -> aSuite tests size).
+		  ('details' -> details asArray) } asDictionary
 ]
 
 { #category : 'accessing' }
@@ -623,6 +639,17 @@ GenieServer >> start [
 { #category : 'actions' }
 GenieServer >> stop [
 	self teapot stop
+]
+
+{ #category : 'private' }
+GenieServer >> suppressChangeLoggingDuring: aBlock [
+	"Run aBlock without recording its class/method changes in the change log,
+	 so test fixtures don't clutter the change set. Portable: runs aBlock directly
+	 if the announcer has no block-scoped suspension."
+
+	^ (SystemAnnouncer uniqueInstance respondsTo: #suspendAllWhile:)
+		  ifTrue: [ SystemAnnouncer uniqueInstance suspendAllWhile: aBlock ]
+		  ifFalse: [ aBlock value ]
 ]
 
 { #category : 'accessing' }
