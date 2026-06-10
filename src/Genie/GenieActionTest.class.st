@@ -19,10 +19,14 @@ GenieActionTest >> setUp [
 
 { #category : 'running' }
 GenieActionTest >> tearDown [
-	#('GenieFixtureFoo' 'GenieFixtureBar' 'GenieFixtureRenamed') do: [ :nm |
-		(Smalltalk classNamed: nm) ifNotNil: [ :c | c removeFromSystem ] ].
-	(GenieServer new packageOrganizer packageNamed: 'Genie-Fixtures' ifAbsent: [ nil ])
-		ifNotNil: [ :p | p removeFromSystem ].
+
+	#( 'GenieFixtureFoo' 'GenieFixtureBar' 'GenieFixtureRenamed' ) do: [
+			:nm |
+			(Smalltalk classNamed: nm) ifNotNil: [ :c | c removeFromSystem ].
+			Undeclared removeKey: nm asSymbol ifAbsent: [ nil ] ].
+	(GenieServer new packageOrganizer
+		 packageNamed: 'Genie-Fixtures'
+		 ifAbsent: [ nil ]) ifNotNil: [ :p | p removeFromSystem ].
 	super tearDown
 ]
 
