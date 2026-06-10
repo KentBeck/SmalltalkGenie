@@ -1,40 +1,41 @@
 Class {
-	#name : #GenieSettings,
-	#superclass : #Object,
+	#name : 'GenieSettings',
+	#superclass : 'Object',
 	#instVars : [
 		'data'
 	],
-	#category : #Genie
+	#category : 'Genie',
+	#package : 'Genie'
 }
 
-{ #category : #'instance creation' }
+{ #category : 'instance creation' }
 GenieSettings class >> defaultCopied [
 	^ self new initializeDefaults
 ]
 
-{ #category : #accessing }
+{ #category : 'accessing' }
 GenieSettings >> asDictionary [
 	^ data copy
 ]
 
-{ #category : #accessing }
+{ #category : 'accessing' }
 GenieSettings >> at: aKey [
 	^ data at: aKey
 ]
 
-{ #category : #accessing }
+{ #category : 'accessing' }
 GenieSettings >> at: aKey put: aValue [
 	^ data at: aKey put: aValue
 ]
 
-{ #category : #initialization }
+{ #category : 'initialization' }
 GenieSettings >> initializeDefaults [
 	data := Dictionary new.
 	data at: #stackSize put: 100.
 	^ self
 ]
 
-{ #category : #accessing }
+{ #category : 'accessing' }
 GenieSettings >> stackSize [
 	^ data at: #stackSize ifAbsent: [ 100 ]
 ]

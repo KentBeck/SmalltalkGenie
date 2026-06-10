@@ -1,10 +1,12 @@
 Class {
-	#name : #GenieProtocolTest,
-	#superclass : #TestCase,
-	#category : #'Genie-Tests'
+	#name : 'GenieProtocolTest',
+	#superclass : 'TestCase',
+	#category : 'Genie-Tests',
+	#package : 'Genie',
+	#tag : 'Tests'
 }
 
-{ #category : #tests }
+{ #category : 'tests' }
 GenieProtocolTest >> testInitializeReturnsProtocolAndCapabilities [
 	| resp result |
 	resp := GenieServer new handleMcpMessage: {
@@ -16,13 +18,13 @@ GenieProtocolTest >> testInitializeReturnsProtocolAndCapabilities [
 	self assert: ((result at: 'serverInfo') at: 'name') equals: 'genie'
 ]
 
-{ #category : #tests }
+{ #category : 'tests' }
 GenieProtocolTest >> testNotificationReturnsNil [
 	self assert: (GenieServer new handleMcpMessage:
 		{ 'method' -> 'notifications/initialized' } asDictionary) isNil
 ]
 
-{ #category : #tests }
+{ #category : 'tests' }
 GenieProtocolTest >> testToolsCallEvalReturnsTextContent [
 	| resp result content |
 	resp := GenieServer new handleMcpMessage: {
@@ -36,7 +38,7 @@ GenieProtocolTest >> testToolsCallEvalReturnsTextContent [
 	self deny: (result at: 'isError')
 ]
 
-{ #category : #tests }
+{ #category : 'tests' }
 GenieProtocolTest >> testToolsListIncludesCoreTools [
 	| resp names |
 	resp := GenieServer new handleMcpMessage: { 'method' -> 'tools/list'. 'id' -> 2 } asDictionary.
@@ -46,7 +48,7 @@ GenieProtocolTest >> testToolsListIncludesCoreTools [
 	self assert: (names includes: 'run_test')
 ]
 
-{ #category : #tests }
+{ #category : 'tests' }
 GenieProtocolTest >> testToolsListSchemaHasRequiredFields [
 	| resp evalTool |
 	resp := GenieServer new handleMcpMessage: { 'method' -> 'tools/list'. 'id' -> 2 } asDictionary.
@@ -55,7 +57,7 @@ GenieProtocolTest >> testToolsListSchemaHasRequiredFields [
 	self assert: (((evalTool at: 'inputSchema') at: 'required') includes: 'code')
 ]
 
-{ #category : #tests }
+{ #category : 'tests' }
 GenieProtocolTest >> testUnknownMethodReturnsJsonRpcError [
 	| resp |
 	resp := GenieServer new handleMcpMessage: { 'method' -> 'frobnicate'. 'id' -> 9 } asDictionary.
@@ -63,7 +65,7 @@ GenieProtocolTest >> testUnknownMethodReturnsJsonRpcError [
 	self assert: ((resp at: 'error') at: 'code') equals: -32601
 ]
 
-{ #category : #tests }
+{ #category : 'tests' }
 GenieProtocolTest >> testUnknownToolReturnsError [
 	| resp |
 	resp := GenieServer new handleMcpMessage: {

@@ -1,33 +1,34 @@
 Class {
-	#name : #Wish,
-	#superclass : #Object,
+	#name : 'Wish',
+	#superclass : 'Object',
 	#instVars : [
 		'arguments'
 	],
-	#category : #Genie
+	#category : 'Genie',
+	#package : 'Genie'
 }
 
-{ #category : #accessing }
+{ #category : 'accessing' }
 Wish >> at: aKey [
 	^ arguments at: aKey asString
 ]
 
-{ #category : #accessing }
+{ #category : 'accessing' }
 Wish >> at: aKey ifAbsent: aBlock [
 	^ arguments at: aKey asString ifAbsent: aBlock
 ]
 
-{ #category : #accessing }
+{ #category : 'accessing' }
 Wish >> contents [
 	^ String streamContents: [ :stream | (NeoJSONWriter on: stream) nextPut: arguments ]
 ]
 
-{ #category : #accessing }
+{ #category : 'accessing' }
 Wish >> entity [
 	^ self
 ]
 
-{ #category : #accessing }
+{ #category : 'accessing' }
 Wish >> setArguments: aDictionary [
 	arguments := aDictionary.
 	^ self

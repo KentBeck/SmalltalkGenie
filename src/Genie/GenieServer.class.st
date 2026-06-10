@@ -1,6 +1,6 @@
 Class {
-	#name : #GenieServer,
-	#superclass : #Object,
+	#name : 'GenieServer',
+	#superclass : 'Object',
 	#instVars : [
 		'teapot',
 		'teapotConfig',
@@ -10,10 +10,11 @@ Class {
 	#classInstVars : [
 		'current'
 	],
-	#category : #Genie
+	#category : 'Genie',
+	#package : 'Genie'
 }
 
-{ #category : #'instance creation' }
+{ #category : 'instance creation' }
 GenieServer class >> configure: teapotConfigDict [
 	| inst |
 	inst := self new.
@@ -21,7 +22,7 @@ GenieServer class >> configure: teapotConfigDict [
 	^ inst
 ]
 
-{ #category : #'instance creation' }
+{ #category : 'instance creation' }
 GenieServer class >> createStarted [
 	| inst |
 	inst := self configure: { #defaultOutput -> #json. #port -> 8087 } asDictionary.
@@ -29,34 +30,34 @@ GenieServer class >> createStarted [
 	^ inst
 ]
 
-{ #category : #accessing }
+{ #category : 'accessing' }
 GenieServer class >> current [
 	^ current ifNil: [ current := self createStarted ]
 ]
 
-{ #category : #accessing }
+{ #category : 'accessing' }
 GenieServer class >> current: anObject [
 	current := anObject
 ]
 
-{ #category : #defaults }
+{ #category : 'defaults' }
 GenieServer class >> defaultSettingsCopied [
 	^ GenieSettings defaultCopied
 ]
 
-{ #category : #'class initialization' }
+{ #category : 'class initialization' }
 GenieServer class >> initialize [
 	SessionManager default registerUserClassNamed: self name
 ]
 
-{ #category : #resetting }
+{ #category : 'resetting' }
 GenieServer class >> restart [
 	self current stop.
 	self current: nil.
 	self current start
 ]
 
-{ #category : #'system startup' }
+{ #category : 'system startup' }
 GenieServer class >> startUp: isImageStarting [
 	isImageStarting ifFalse: [ ^ self ].
 	current ifNotNil: [ current stop ].
@@ -64,19 +65,19 @@ GenieServer class >> startUp: isImageStarting [
 	Smalltalk session addDeferredStartupAction: [ self current ]
 ]
 
-{ #category : #private }
+{ #category : 'private' }
 GenieServer >> asCamelCase: aString [
 	^ (aString copyReplaceAll: '_' with: ' ') asCamelCase uncapitalized
 ]
 
-{ #category : #factory }
+{ #category : 'factory' }
 GenieServer >> createTeapot [
 	^ (Teapot configure: self teapotConfig associations)
 		POST: '/mcp' -> [ :req | self handleMcpHttp: req ];
 		yourself
 ]
 
-{ #category : #handling }
+{ #category : 'handling' }
 GenieServer >> handleApplySettings: request [
 	^ self returnResultDo: [
 		| requestJson newSettings |
@@ -88,7 +89,7 @@ GenieServer >> handleApplySettings: request [
 		'Settings applied successfully' ]
 ]
 
-{ #category : #handling }
+{ #category : 'handling' }
 GenieServer >> handleDefineClass: request [
 	^ self returnResultDo: [
 		| name superclassName fields package superclass slots newClass |
@@ -104,7 +105,7 @@ GenieServer >> handleDefineClass: request [
 		newClass name asString ]
 ]
 
-{ #category : #handling }
+{ #category : 'handling' }
 GenieServer >> handleDefineMethod: request [
 	^ self returnResultDo: [
 		| className source protocol targetClass selector |
@@ -117,7 +118,7 @@ GenieServer >> handleDefineMethod: request [
 		selector asString ]
 ]
 
-{ #category : #handling }
+{ #category : 'handling' }
 GenieServer >> handleEval: request [
 	^ self returnResultDo: [
 		| requestJson code |
@@ -126,20 +127,27 @@ GenieServer >> handleEval: request [
 		self class compiler evaluate: code ]
 ]
 
-{ #category : #handling }
+{ #category : 'handling' }
 GenieServer >> handleExportPackage: request [
 	^ self returnResultDo: [
-		| packageName outputPath snapshot outputPathRef writer |
+		| packageName outputPath snapshot outputPathRef writer propsRef |
 		packageName := request at: #package_name.
 		outputPath := request at: #path.
 		snapshot := (MCPackage named: packageName) snapshot.
 		outputPathRef := outputPath asFileReference.
 		writer := TonelWriter on: outputPathRef ensureCreateDirectory.
 		writer writeSnapshot: snapshot.
+		"Write the Tonel format marker so Metacello can load the exported repo;
+		 TonelWriter writes the package dirs but not this project-level file."
+		propsRef := outputPathRef / '.properties'.
+		propsRef exists ifFalse: [
+			propsRef writeStreamDo: [ :s | s nextPutAll: '{
+	#format : #tonel
+}' ] ].
 		packageName , ' exported to: ' , outputPathRef absolutePath pathString ]
 ]
 
-{ #category : #handling }
+{ #category : 'handling' }
 GenieServer >> handleGetClassComment: request [
 	^ self returnResultDo: [
 		| className class |
@@ -148,7 +156,7 @@ GenieServer >> handleGetClassComment: request [
 		class comment ]
 ]
 
-{ #category : #handling }
+{ #category : 'handling' }
 GenieServer >> handleGetClassSource: request [
 	^ self returnResultDo: [
 		| className targetClass |
@@ -157,7 +165,7 @@ GenieServer >> handleGetClassSource: request [
 		TonelWriter sourceCodeOf: targetClass ]
 ]
 
-{ #category : #handling }
+{ #category : 'handling' }
 GenieServer >> handleGetMethodSource: request [
 	^ self returnResultDo: [
 		| tokens isClassMethod isClassSide className methodName targetClass |
@@ -171,12 +179,12 @@ GenieServer >> handleGetMethodSource: request [
 		targetClass sourceCodeAt: methodName asSymbol ]
 ]
 
-{ #category : #handling }
+{ #category : 'handling' }
 GenieServer >> handleGetSettings: request [
 	^ self returnResultDo: [ self settings asDictionary ]
 ]
 
-{ #category : #handling }
+{ #category : 'handling' }
 GenieServer >> handleImportPackage: request [
 	^ self returnResultDo: [
 		| packageName sourcePath reader sourcePathRef |
@@ -189,7 +197,7 @@ GenieServer >> handleImportPackage: request [
 		packageName , ' imported from: ' , sourcePathRef absolutePath pathString ]
 ]
 
-{ #category : #handling }
+{ #category : 'handling' }
 GenieServer >> handleInstallProject: request [
 	^ self returnResultDo: [
 		| projectName repositoryUrl loadGroups loadOptions registration |
@@ -204,7 +212,7 @@ GenieServer >> handleInstallProject: request [
 		'Installed: ' , registration printString ] on: MCMergeOrLoadWarning do: [ :ex | Error signal: ex description ] ]
 ]
 
-{ #category : #handling }
+{ #category : 'handling' }
 GenieServer >> handleListClasses: request [
 	^ self returnResultDo: [
 		| packageName |
@@ -213,7 +221,7 @@ GenieServer >> handleListClasses: request [
 			classes collect: [ :each | each name ]) sorted ]
 ]
 
-{ #category : #handling }
+{ #category : 'handling' }
 GenieServer >> handleListExtendedClasses: request [
 	^ self returnResultDo: [
 		| packageName |
@@ -221,7 +229,7 @@ GenieServer >> handleListExtendedClasses: request [
 		(self packageOrganizer packageNamed: packageName) extendedClassNames sorted ]
 ]
 
-{ #category : #handling }
+{ #category : 'handling' }
 GenieServer >> handleListMethods: request [
 	^ self returnResultDo: [
 		| packageName |
@@ -230,13 +238,13 @@ GenieServer >> handleListMethods: request [
 			methods collect: [ :each | each printString ]) sorted ]
 ]
 
-{ #category : #handling }
+{ #category : 'handling' }
 GenieServer >> handleListPackages: request [
 	^ self returnResultDo: [
 		(Smalltalk packages collect: [ :each | each name ]) sorted ]
 ]
 
-{ #category : #handling }
+{ #category : 'handling' }
 GenieServer >> handleMcpHttp: request [
 	| origin message response json resp negotiatedVersion |
 	origin := (request headers includesKey: 'Origin')
@@ -255,7 +263,7 @@ GenieServer >> handleMcpHttp: request [
 	^ resp
 ]
 
-{ #category : #'mcp - protocol' }
+{ #category : 'mcp - protocol' }
 GenieServer >> handleMcpMessage: aMessage [
 	| method id params |
 	method := aMessage at: 'method' ifAbsent: [ nil ].
@@ -269,7 +277,7 @@ GenieServer >> handleMcpMessage: aMessage [
 	^ self jsonRpcError: -32601 message: 'Method not found: ' , method asString id: id
 ]
 
-{ #category : #handling }
+{ #category : 'handling' }
 GenieServer >> handleRemoveClass: request [
 	^ self returnResultDo: [
 		| className targetClass |
@@ -280,7 +288,7 @@ GenieServer >> handleRemoveClass: request [
 		className ]
 ]
 
-{ #category : #handling }
+{ #category : 'handling' }
 GenieServer >> handleRemoveMethod: request [
 	^ self returnResultDo: [
 		| className selector targetClass isClassSide |
@@ -296,19 +304,20 @@ GenieServer >> handleRemoveMethod: request [
 		selector asString ]
 ]
 
-{ #category : #handling }
+{ #category : 'handling' }
 GenieServer >> handleRenameClass: request [
 	^ self returnResultDo: [
-		| oldName newName oldClass |
+		| oldName newName |
 		oldName := request at: #old_name.
 		newName := request at: #new_name.
-		oldClass := Smalltalk classNamed: oldName.
-		oldClass ifNil: [ self error: 'Unknown class: ' , oldName ].
-		(RBRenameClassRefactoring rename: oldClass to: newName asSymbol) execute.
+		(Smalltalk classNamed: oldName) ifNil: [ self error: 'Unknown class: ' , oldName ].
+		(Smalltalk includesKey: #ReRenameClassRefactoring)
+			ifTrue: [ ((Smalltalk classNamed: #ReRenameClassRefactoring) rename: oldName asSymbol to: newName asSymbol) execute ]
+			ifFalse: [ ((Smalltalk classNamed: #RBRenameClassRefactoring) rename: (Smalltalk classNamed: oldName) to: newName asSymbol) execute ].
 		newName ]
 ]
 
-{ #category : #handling }
+{ #category : 'handling' }
 GenieServer >> handleRunTest: request [
 	^ self returnResultDo: [
 		| className packageName |
@@ -319,10 +328,10 @@ GenieServer >> handleRunTest: request [
 		self runStructuredTestSuite: (self testSuiteForClass: className package: packageName) ]
 ]
 
-{ #category : #handling }
+{ #category : 'handling' }
 GenieServer >> handleSaveImage: request [
 	^ self returnResultDo: [
-		| className packageName report shouldSave |
+		| className packageName report shouldSave snap resuming |
 		className := request at: #test_class ifAbsent: [ nil ].
 		packageName := request at: #test_package ifAbsent: [ nil ].
 		report := nil.
@@ -331,13 +340,18 @@ GenieServer >> handleSaveImage: request [
 			report := self runStructuredTestSuite: (self testSuiteForClass: className package: packageName).
 			shouldSave := ((report at: 'failed') + (report at: 'errored')) = 0 ].
 		shouldSave ifTrue: [
-			"snapshot returns true ONLY when this image is later resumed from the
-			 saved snapshot; the original request socket is long dead, so just stop."
-			(Smalltalk snapshot: true andQuit: false) ifTrue: [ Processor terminateActive ] ].
+			snap := Smalltalk snapshot: true andQuit: false.
+			"Older Pharo returns a Boolean (isImageStarting); Pharo 12+ returns a SnapshotOperation.
+			 True/non-nil only when the image is later resumed from this snapshot — the original
+			 request socket is long dead, so just stop."
+			resuming := (snap isKindOf: Boolean)
+				ifTrue: [ snap ]
+				ifFalse: [ (snap respondsTo: #isImageStarting) and: [ snap isImageStarting ] ].
+			resuming ifTrue: [ Processor terminateActive ] ].
 		{ 'saved' -> shouldSave. 'tests' -> (report ifNil: [ 'not gated' ]) } asDictionary ]
 ]
 
-{ #category : #handling }
+{ #category : 'handling' }
 GenieServer >> handleSearchClassesLike: request [
 	^ self returnResultDo: [
 		| query lower results |
@@ -349,7 +363,7 @@ GenieServer >> handleSearchClassesLike: request [
 		results asSortedCollection asArray ]
 ]
 
-{ #category : #handling }
+{ #category : 'handling' }
 GenieServer >> handleSearchImplementors: request [
 	^ self returnResultDo: [
 		| selector nav results |
@@ -361,7 +375,7 @@ GenieServer >> handleSearchImplementors: request [
 		results asArray ]
 ]
 
-{ #category : #handling }
+{ #category : 'handling' }
 GenieServer >> handleSearchMethodsLike: request [
 	^ self returnResultDo: [
 		| query nav results |
@@ -372,7 +386,7 @@ GenieServer >> handleSearchMethodsLike: request [
 		results ]
 ]
 
-{ #category : #handling }
+{ #category : 'handling' }
 GenieServer >> handleSearchReferences: request [
 	^ self returnResultDo: [
 		| symbol nav |
@@ -382,7 +396,7 @@ GenieServer >> handleSearchReferences: request [
 			{ ('class' -> method methodClass name). ('method' -> method selector). ('package' -> method package name) } asDictionary ] ]
 ]
 
-{ #category : #handling }
+{ #category : 'handling' }
 GenieServer >> handleSearchReferencesToClass: request [
 	^ self returnResultDo: [
 		| className nav targetClass |
@@ -393,7 +407,7 @@ GenieServer >> handleSearchReferencesToClass: request [
 			{ ('class' -> method methodClass name). ('method' -> method selector). ('package' -> method package name) } asDictionary ] ]
 ]
 
-{ #category : #handling }
+{ #category : 'handling' }
 GenieServer >> handleSearchTraitsLike: request [
 	^ self returnResultDo: [
 		| query lower |
@@ -403,18 +417,18 @@ GenieServer >> handleSearchTraitsLike: request [
 			collect: [ :each | each name ] ]
 ]
 
-{ #category : #'mcp - protocol' }
+{ #category : 'mcp - protocol' }
 GenieServer >> jsonRpc: aResult id: anId [
 	^ { 'jsonrpc' -> '2.0'. 'id' -> anId. 'result' -> aResult } asDictionary
 ]
 
-{ #category : #'mcp - protocol' }
+{ #category : 'mcp - protocol' }
 GenieServer >> jsonRpcError: aCode message: aMessage id: anId [
 	^ { 'jsonrpc' -> '2.0'. 'id' -> anId.
 	    'error' -> { 'code' -> aCode. 'message' -> aMessage } asDictionary } asDictionary
 ]
 
-{ #category : #'mcp - protocol' }
+{ #category : 'mcp - protocol' }
 GenieServer >> mcpInitialize: params id: anId [
 	| version |
 	version := params at: 'protocolVersion' ifAbsent: [ '2025-11-25' ].
@@ -424,7 +438,7 @@ GenieServer >> mcpInitialize: params id: anId [
 		id: anId
 ]
 
-{ #category : #'mcp - tools' }
+{ #category : 'mcp - tools' }
 GenieServer >> mcpTool: aName description: aDesc selector: aSelector properties: propAssocs required: requiredNames [
 	| props |
 	props := Dictionary new.
@@ -435,7 +449,7 @@ GenieServer >> mcpTool: aName description: aDesc selector: aSelector properties:
 	    'inputSchema' -> { 'type' -> 'object'. 'properties' -> props. 'required' -> requiredNames } asDictionary } asDictionary
 ]
 
-{ #category : #'mcp - tools' }
+{ #category : 'mcp - tools' }
 GenieServer >> mcpToolSpecs [
 	^ {
 		self mcpTool: 'eval' description: 'Evaluate a Pharo Smalltalk expression and return the result.'
@@ -492,7 +506,7 @@ GenieServer >> mcpToolSpecs [
 			selector: #handleInstallProject: properties: { 'project_name' -> 'string'. 'repository_url' -> 'string'. 'load_groups' -> 'string' } required: #('project_name' 'repository_url') }
 ]
 
-{ #category : #'mcp - protocol' }
+{ #category : 'mcp - protocol' }
 GenieServer >> mcpToolsCall: params id: anId [
 	| toolName arguments spec result text |
 	toolName := params at: 'name'.
@@ -505,7 +519,7 @@ GenieServer >> mcpToolsCall: params id: anId [
 		'isError' -> (result at: 'success') not } asDictionary id: anId
 ]
 
-{ #category : #'mcp - protocol' }
+{ #category : 'mcp - protocol' }
 GenieServer >> mcpToolsList: anId [
 	| tools |
 	tools := self mcpToolSpecs collect: [ :spec |
@@ -515,12 +529,14 @@ GenieServer >> mcpToolsList: anId [
 	^ self jsonRpc: { 'tools' -> tools asArray } asDictionary id: anId
 ]
 
-{ #category : #accessing }
+{ #category : 'accessing' }
 GenieServer >> packageOrganizer [
-	^ RPackageOrganizer default
+	^ (Smalltalk includesKey: #PackageOrganizer)
+		ifTrue: [ (Smalltalk classNamed: #PackageOrganizer) default ]
+		ifFalse: [ (Smalltalk classNamed: #RPackageOrganizer) default ]
 ]
 
-{ #category : #private }
+{ #category : 'private' }
 GenieServer >> receiverErrorInfoFrom: receiverObject [
 	| receiverErrorInfo values |
 	receiverErrorInfo := Dictionary new.
@@ -532,7 +548,7 @@ GenieServer >> receiverErrorInfoFrom: receiverObject [
 	^ receiverErrorInfo
 ]
 
-{ #category : #private }
+{ #category : 'private' }
 GenieServer >> returnError: anError by: resultDict [
 	| errorInfo signalerContext |
 	errorInfo := Dictionary new.
@@ -544,7 +560,7 @@ GenieServer >> returnError: anError by: resultDict [
 	^ resultDict
 ]
 
-{ #category : #private }
+{ #category : 'private' }
 GenieServer >> returnResultDo: aBlock [
 	| resultDict |
 	resultDict := { ('success' -> false) } asDictionary.
@@ -555,7 +571,7 @@ GenieServer >> returnResultDo: aBlock [
 	^ resultDict
 ]
 
-{ #category : #testing }
+{ #category : 'testing' }
 GenieServer >> runStructuredTestSuite: aSuite [
 	| details passed failed errored |
 	details := OrderedCollection new.
@@ -575,52 +591,52 @@ GenieServer >> runStructuredTestSuite: aSuite [
 	    'total' -> aSuite tests size. 'details' -> details asArray } asDictionary
 ]
 
-{ #category : #accessing }
+{ #category : 'accessing' }
 GenieServer >> settings [
 	^ settings ifNil: [ settings := self class defaultSettingsCopied ]
 ]
 
-{ #category : #accessing }
+{ #category : 'accessing' }
 GenieServer >> settings: anObject [
 	settings := anObject
 ]
 
-{ #category : #accessing }
+{ #category : 'accessing' }
 GenieServer >> stackSize [
 	^ self settings stackSize
 ]
 
-{ #category : #actions }
+{ #category : 'actions' }
 GenieServer >> start [
 	self teapot start
 ]
 
-{ #category : #actions }
+{ #category : 'actions' }
 GenieServer >> stop [
 	self teapot stop
 ]
 
-{ #category : #accessing }
+{ #category : 'accessing' }
 GenieServer >> teapot [
 	^ teapot ifNil: [ teapot := self createTeapot ]
 ]
 
-{ #category : #accessing }
+{ #category : 'accessing' }
 GenieServer >> teapot: anObject [
 	teapot := anObject
 ]
 
-{ #category : #accessing }
+{ #category : 'accessing' }
 GenieServer >> teapotConfig [
 	^ teapotConfig
 ]
 
-{ #category : #accessing }
+{ #category : 'accessing' }
 GenieServer >> teapotConfig: anObject [
 	teapotConfig := anObject
 ]
 
-{ #category : #testing }
+{ #category : 'testing' }
 GenieServer >> testSuiteForClass: className package: packageName [
 	^ className
 		ifNotNil: [ (Smalltalk globals at: className asSymbol) suite ]

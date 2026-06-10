@@ -1,30 +1,32 @@
 Class {
-	#name : #GenieActionTest,
-	#superclass : #TestCase,
-	#category : #'Genie-Tests'
+	#name : 'GenieActionTest',
+	#superclass : 'TestCase',
+	#category : 'Genie-Tests',
+	#package : 'Genie',
+	#tag : 'Tests'
 }
 
-{ #category : #helpers }
+{ #category : 'helpers' }
 GenieActionTest >> invoke: aSelector with: aDictionary [
 	^ GenieServer new perform: aSelector with: (Wish new setArguments: aDictionary)
 ]
 
-{ #category : #running }
+{ #category : 'running' }
 GenieActionTest >> setUp [
 	super setUp.
-	Author fullName: 'KentBeck'
+	(Smalltalk includesKey: #Author) ifTrue: [ (Smalltalk classNamed: #Author) fullName: 'Genie' ]
 ]
 
-{ #category : #running }
+{ #category : 'running' }
 GenieActionTest >> tearDown [
 	#('GenieFixtureFoo' 'GenieFixtureBar' 'GenieFixtureRenamed') do: [ :nm |
 		(Smalltalk classNamed: nm) ifNotNil: [ :c | c removeFromSystem ] ].
-	(RPackageOrganizer default packageNamed: 'Genie-Fixtures' ifAbsent: [ nil ])
+	(GenieServer new packageOrganizer packageNamed: 'Genie-Fixtures' ifAbsent: [ nil ])
 		ifNotNil: [ :p | p removeFromSystem ].
 	super tearDown
 ]
 
-{ #category : #tests }
+{ #category : 'tests' }
 GenieActionTest >> testApplyThenGetSettings [
 	| s apply get |
 	s := GenieServer new.
@@ -34,7 +36,7 @@ GenieActionTest >> testApplyThenGetSettings [
 	self assert: ((get at: 'result') at: #stackSize) equals: 42
 ]
 
-{ #category : #tests }
+{ #category : 'tests' }
 GenieActionTest >> testDefineClassActionCreatesClass [
 	| result cls |
 	result := self invoke: #handleDefineClass: with: {
@@ -49,7 +51,7 @@ GenieActionTest >> testDefineClassActionCreatesClass [
 	self assert: (cls instVarNames collect: [ :e | e asString ]) asArray equals: #('a' 'b')
 ]
 
-{ #category : #tests }
+{ #category : 'tests' }
 GenieActionTest >> testDefineClassUnknownSuperclassReportsError [
 	| result |
 	result := self invoke: #handleDefineClass: with: {
@@ -61,7 +63,7 @@ GenieActionTest >> testDefineClassUnknownSuperclassReportsError [
 	self assert: (result includesKey: 'error')
 ]
 
-{ #category : #tests }
+{ #category : 'tests' }
 GenieActionTest >> testDefineMethodActionCompilesMethod [
 	| defResult cls |
 	self invoke: #handleDefineClass: with: {
@@ -79,7 +81,7 @@ GenieActionTest >> testDefineMethodActionCompilesMethod [
 	self assert: (cls new double: 21) equals: 42
 ]
 
-{ #category : #tests }
+{ #category : 'tests' }
 GenieActionTest >> testEvalActionEvaluatesCode [
 	| result |
 	result := self invoke: #handleEval: with: { 'code' -> '3 + 4 factorial' } asDictionary.
@@ -87,7 +89,21 @@ GenieActionTest >> testEvalActionEvaluatesCode [
 	self assert: (result at: 'result') equals: 27
 ]
 
-{ #category : #tests }
+{ #category : 'tests' }
+GenieActionTest >> testExportPackageWritesTonelPropertiesMarker [
+	| dir result propsFile |
+	dir := '/tmp/genie-export-test' asFileReference.
+	dir exists ifTrue: [ dir ensureDeleteAll ].
+	dir ensureCreateDirectory.
+	[ result := self invoke: #handleExportPackage: with: { 'package_name' -> 'BaselineOfGenie'. 'path' -> dir fullName } asDictionary.
+	  self assert: (result at: 'success').
+	  propsFile := dir / '.properties'.
+	  self assert: propsFile exists.
+	  self assert: (propsFile contents includesSubstring: 'tonel') ]
+		ensure: [ dir exists ifTrue: [ dir ensureDeleteAll ] ]
+]
+
+{ #category : 'tests' }
 GenieActionTest >> testGetSettingsReturnsStackSize [
 	| result |
 	result := GenieServer new handleGetSettings: nil.
@@ -95,7 +111,15 @@ GenieActionTest >> testGetSettingsReturnsStackSize [
 	self assert: ((result at: 'result') at: #stackSize) equals: 100
 ]
 
-{ #category : #tests }
+{ #category : 'tests' }
+GenieActionTest >> testListClassesActionListsPackageClasses [
+	| result |
+	result := self invoke: #handleListClasses: with: { 'package_name' -> 'Genie' } asDictionary.
+	self assert: (result at: 'success').
+	self assert: ((result at: 'result') anySatisfy: [ :n | n asString = 'GenieServer' ])
+]
+
+{ #category : 'tests' }
 GenieActionTest >> testRemoveClassActionRemovesClass [
 	| result |
 	self invoke: #handleDefineClass: with: {
@@ -110,7 +134,7 @@ GenieActionTest >> testRemoveClassActionRemovesClass [
 	self deny: (Smalltalk includesKey: #GenieFixtureBar)
 ]
 
-{ #category : #tests }
+{ #category : 'tests' }
 GenieActionTest >> testRemoveMethodActionRemovesMethod [
 	| result cls |
 	self invoke: #handleDefineClass: with: {
@@ -127,7 +151,7 @@ GenieActionTest >> testRemoveMethodActionRemovesMethod [
 	self deny: (cls includesSelector: #ping)
 ]
 
-{ #category : #tests }
+{ #category : 'tests' }
 GenieActionTest >> testRenameClassRenamesAndUpdatesReferences [
 	| result |
 	self invoke: #handleDefineClass: with: { 'name' -> 'GenieFixtureFoo'. 'superclass' -> 'Object'. 'fields' -> ''. 'package' -> 'Genie-Fixtures' } asDictionary.
@@ -141,7 +165,7 @@ GenieActionTest >> testRenameClassRenamesAndUpdatesReferences [
 	self assert: (((Smalltalk classNamed: 'GenieFixtureBar') >> #makeFoo) sourceCode includesSubstring: 'GenieFixtureRenamed')
 ]
 
-{ #category : #tests }
+{ #category : 'tests' }
 GenieActionTest >> testRunTestActionReportsStructuredResults [
 	| result inner |
 	self invoke: #handleDefineClass: with: {
@@ -161,7 +185,7 @@ GenieActionTest >> testRunTestActionReportsStructuredResults [
 	self assert: (inner at: 'failed') equals: 1
 ]
 
-{ #category : #tests }
+{ #category : 'tests' }
 GenieActionTest >> testSaveImageGateBlocksWhenTestsFail [
 	| result inner |
 	self invoke: #handleDefineClass: with: { 'name' -> 'GenieFixtureBar'. 'superclass' -> 'TestCase'. 'fields' -> ''. 'package' -> 'Genie-Fixtures' } asDictionary.
@@ -174,7 +198,7 @@ GenieActionTest >> testSaveImageGateBlocksWhenTestsFail [
 	self assert: ((inner at: 'tests') at: 'failed') >= 1
 ]
 
-{ #category : #tests }
+{ #category : 'tests' }
 GenieActionTest >> testSettingsIsSelfContained [
 	self assert: GenieServer new settings class name asString equals: 'GenieSettings'
 ]
