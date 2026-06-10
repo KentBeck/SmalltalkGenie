@@ -82,6 +82,16 @@ GenieActionTest >> testDefineMethodActionCompilesMethod [
 ]
 
 { #category : 'tests' }
+GenieActionTest >> testDefineMethodFormatsSourceOnCompile [
+	| src |
+	self invoke: #handleDefineClass: with: { 'name' -> 'GenieFixtureFoo'. 'superclass' -> 'Object'. 'fields' -> ''. 'package' -> 'Genie-Fixtures' } asDictionary.
+	self invoke: #handleDefineMethod: with: { 'class' -> 'GenieFixtureFoo'. 'source' -> 'fmtProbe ^1+2'. 'protocol' -> 'tests' } asDictionary.
+	src := ((Smalltalk classNamed: 'GenieFixtureFoo') >> #fmtProbe) sourceCode.
+	self assert: (src includesSubstring: '^ 1 + 2').
+	self deny: (src includesSubstring: '^1+2')
+]
+
+{ #category : 'tests' }
 GenieActionTest >> testEvalActionEvaluatesCode [
 	| result |
 	result := self invoke: #handleEval: with: { 'code' -> '3 + 4 factorial' } asDictionary.

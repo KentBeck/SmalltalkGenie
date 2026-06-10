@@ -77,6 +77,15 @@ GenieServer >> createTeapot [
 		yourself
 ]
 
+{ #category : 'private' }
+GenieServer >> formattedSource: source [
+	"Pretty-print method source with the standard formatter. Fall back to the raw
+	 source if it does not parse, so a genuine syntax error surfaces on compile."
+	^ [ (RBParser parseMethod: source) formattedCode ]
+		on: Error
+		do: [ :e | source ]
+]
+
 { #category : 'handling' }
 GenieServer >> handleApplySettings: request [
 	^ self returnResultDo: [
@@ -114,7 +123,7 @@ GenieServer >> handleDefineMethod: request [
 		protocol := request at: #protocol ifAbsent: [ 'as yet unclassified' ].
 		targetClass := Smalltalk classNamed: className.
 		targetClass ifNil: [ self error: 'Unknown class: ' , className ].
-		selector := targetClass compile: source classified: protocol.
+		selector := targetClass compile: (self formattedSource: source) classified: protocol.
 		selector asString ]
 ]
 
