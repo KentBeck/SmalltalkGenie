@@ -44,6 +44,10 @@ Then register it with your MCP client. For Claude Code:
 claude mcp add --transport http genie http://localhost:8087/mcp
 ```
 
+For a full walk-through — auto-start, lifecycle commands, connecting the client,
+and installing the agent's working files (`CLAUDE.md` + skills) so it drives the
+image safely — see **[SETUP.md](SETUP.md)**.
+
 ## Tools
 
 The genie grants 26 wishes over MCP:
