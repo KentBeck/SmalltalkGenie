@@ -31,12 +31,16 @@ Metacello new
 Tested with Pharo 12+ (the code also runs on Pharo 9). The baseline pulls in its
 only non-base dependencies, **Teapot** (HTTP) and **NeoJSON**.
 
-On a freshly loaded image, set the author once so headless compiles don't block
-on the "author initials" dialog:
+On **Pharo ≤ 12**, set the author once on a freshly loaded image so headless
+compiles don't block on the modal "author initials" dialog:
 
 ```smalltalk
 Author fullName: 'YourName'.
 ```
+
+**Pharo 13 removed the `Author` class** (and that dialog), so this step does not
+apply there — evaluating `Author fullName: …` on Pharo 13 raises an *undeclared
+variable* error. On 13 there is nothing to set; just skip it.
 
 ## Run
 
