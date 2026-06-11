@@ -13,6 +13,12 @@ it, and each MCP tool call is a **wish** (`Wish` is the class that carries an
 incoming call's arguments). You never enter the lamp; you make wishes and the
 genie carries them out in its own world.
 
+> ⚠️ **Security: a running Genie server is an unauthenticated remote-code-execution
+> endpoint.** The `eval` tool runs arbitrary Smalltalk — i.e. arbitrary code — with
+> the full privileges of the process, and there is no authentication. Run it only on
+> a machine and image you trust, and never expose the port to an untrusted network.
+> Read **[Security](#security)** before you run it.
+
 ## Install
 
 ```smalltalk
@@ -65,11 +71,49 @@ The genie grants 26 wishes over MCP:
 - **Persistence:** `save_image` — snapshots the image, optionally **gated on
   tests**: pass `test_package` / `test_class` and it saves *only* if they pass.
 
+## Security
+
+**Treat a running Genie server as an open, unauthenticated remote shell on the
+host.** That is what it is, by design — the whole point is to let a client program
+a live image — so the responsibility for containing it is yours.
+
+- **`eval` is arbitrary code execution.** It compiles and runs any Smalltalk you
+  send (`handleEval:` is literally `compiler evaluate: code`). Through it a caller
+  can read, write, or delete any file the user can, open network connections, spawn
+  OS processes, exfiltrate data, and modify or wipe the image. The narrower tools
+  (`define_method`, `remove_class`, `save_image`, …) still let a caller rewrite the
+  running system.
+- **The "go only through the tools" rule in `CLAUDE.md` is not a sandbox.** It is
+  guidance to a cooperating agent. A confused, jailbroken, or prompt-injected agent —
+  or anything else that reaches the port — can call `eval` and do anything. There is
+  no allow-list and no capability restriction.
+- **No authentication.** Any client that can open a TCP connection to the port and
+  send a JSON body is fully trusted. There is no token, password, or handshake.
+- **The `Origin` check is narrow.** The server rejects (403) requests whose HTTP
+  `Origin` header isn't `localhost`/`127.0.0.1`, which blocks malicious *web pages*
+  (cross-origin / DNS-rebinding via a browser). But a non-browser client — `curl`, a
+  script, another MCP client — sends no `Origin` header, so the check is skipped and
+  the request is served.
+- **Not bound to loopback.** The listening socket sets no binding interface, so the
+  port may be reachable from your network, not just your machine.
+
+Practical rules:
+
+- Run Genie only on a machine you trust, in an image you can afford to lose.
+- Don't load it into an image holding secrets, credentials, or production data.
+- Keep the port (`8087`) off untrusted networks — firewall it or bind it to
+  loopback. **Never expose it to the public internet.**
+- Only connect clients/agents you trust, and review what they run.
+- For untrusted or experimental use, run the whole image inside a throwaway VM or
+  container.
+
 ## Design notes
 
 - **Direct, no bridge.** The image is the MCP endpoint. Plain `application/json`
   request/response over a single `POST /mcp` (no SSE required); protocol version
-  `2025-11-25`. Binds to localhost; validates the `Origin` header.
+  `2025-11-25`. Validates the `Origin` header to block browser cross-origin
+  requests — but there is **no authentication** and the socket is not restricted to
+  loopback; see [Security](#security).
 - **Headless, code-only.** No Morphic / Spec / Roassal, no screen inspection.
 - **Self-contained.** Depends only on Teapot, NeoJSON, and base Pharo.
 
