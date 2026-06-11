@@ -102,10 +102,10 @@ GenieServer >> handleApplySettings: request [
 GenieServer >> handleDefineClass: request [
 	^ self returnResultDo: [
 		| name superclassName fields package superclass slots newClass |
-		name := request at: #name.
-		superclassName := request at: #superclass.
+		name := request at: #class_name.
+		superclassName := request at: #superclass_name.
 		fields := request at: #fields.
-		package := request at: #package.
+		package := request at: #package_name.
 		superclass := Smalltalk classNamed: superclassName.
 		superclass ifNil: [ self error: 'Unknown superclass: ' , superclassName ].
 		slots := (fields substrings collect: [ :each | each asSymbol ]) asArray.
@@ -116,15 +116,20 @@ GenieServer >> handleDefineClass: request [
 
 { #category : 'handling' }
 GenieServer >> handleDefineMethod: request [
+
 	^ self returnResultDo: [
-		| className source protocol targetClass selector |
-		className := request at: #class.
-		source := request at: #source.
-		protocol := request at: #protocol ifAbsent: [ 'as yet unclassified' ].
-		targetClass := Smalltalk classNamed: className.
-		targetClass ifNil: [ self error: 'Unknown class: ' , className ].
-		selector := targetClass compile: (self formattedSource: source) classified: protocol.
-		selector asString ]
+			  | className source protocol targetClass selector |
+			  className := request at: #class_name.
+			  source := request at: #source.
+			  protocol := request
+				              at: #protocol
+				              ifAbsent: [ 'as yet unclassified' ].
+			  targetClass := Smalltalk classNamed: className.
+			  targetClass ifNil: [ self error: 'Unknown class: ' , className ].
+			  selector := targetClass
+				              compile: (self formattedSource: source)
+				              classified: protocol.
+			  selector asString ]
 ]
 
 { #category : 'handling' }
@@ -179,8 +184,8 @@ GenieServer >> handleGetMethodSource: request [
 	^ self returnResultDo: [
 		| tokens isClassMethod isClassSide className methodName targetClass |
 		tokens := (request at: #class_name) findTokens: ' '.
-		isClassMethod := request at: #is_class_method ifAbsent: [ 'false' ].
-		isClassSide := tokens size = 2 or: [ isClassMethod trimBoth asLowercase = 'true' ].
+		isClassMethod := (request at: #is_class_method ifAbsent: [ false ]) == true.
+		isClassSide := tokens size = 2 or: [ isClassMethod ].
 		className := tokens first.
 		methodName := request at: #method_name.
 		targetClass := Smalltalk globals at: className asSymbol.
@@ -290,7 +295,7 @@ GenieServer >> handleMcpMessage: aMessage [
 GenieServer >> handleRemoveClass: request [
 	^ self returnResultDo: [
 		| className targetClass |
-		className := request at: #name.
+		className := request at: #class_name.
 		targetClass := Smalltalk classNamed: className.
 		targetClass ifNil: [ self error: 'Unknown class: ' , className ].
 		targetClass removeFromSystem.
@@ -301,12 +306,12 @@ GenieServer >> handleRemoveClass: request [
 GenieServer >> handleRemoveMethod: request [
 	^ self returnResultDo: [
 		| className selector targetClass isClassSide |
-		className := request at: #class.
-		selector := request at: #selector.
-		isClassSide := request at: #is_class_method ifAbsent: [ 'false' ].
+		className := request at: #class_name.
+		selector := request at: #method_name.
+		isClassSide := (request at: #is_class_method ifAbsent: [ false ]) == true.
 		targetClass := Smalltalk classNamed: className.
 		targetClass ifNil: [ self error: 'Unknown class: ' , className ].
-		isClassSide = 'true' ifTrue: [ targetClass := targetClass class ].
+		isClassSide ifTrue: [ targetClass := targetClass class ].
 		(targetClass includesSelector: selector asSymbol)
 			ifFalse: [ self error: 'No such method: ' , className , '>>' , selector ].
 		targetClass removeSelector: selector asSymbol.
@@ -317,8 +322,8 @@ GenieServer >> handleRemoveMethod: request [
 GenieServer >> handleRenameClass: request [
 	^ self returnResultDo: [
 		| oldName newName |
-		oldName := request at: #old_name.
-		newName := request at: #new_name.
+		oldName := request at: #class_name.
+		newName := request at: #new_class_name.
 		(Smalltalk classNamed: oldName) ifNil: [ self error: 'Unknown class: ' , oldName ].
 		(Smalltalk includesKey: #ReRenameClassRefactoring)
 			ifTrue: [ ((Smalltalk classNamed: #ReRenameClassRefactoring) rename: oldName asSymbol to: newName asSymbol) execute ]
@@ -460,59 +465,199 @@ GenieServer >> mcpTool: aName description: aDesc selector: aSelector properties:
 
 { #category : 'mcp - tools' }
 GenieServer >> mcpToolSpecs [
+
 	^ {
-		self mcpTool: 'eval' description: 'Evaluate a Pharo Smalltalk expression and return the result.'
-			selector: #handleEval: properties: { 'code' -> 'string' } required: #('code').
-		self mcpTool: 'define_class' description: 'Define (or redefine) a class.'
-			selector: #handleDefineClass: properties: { 'name' -> 'string'. 'superclass' -> 'string'. 'fields' -> 'string'. 'package' -> 'string' } required: #('name' 'superclass' 'fields' 'package').
-		self mcpTool: 'define_method' description: 'Compile a method into a class.'
-			selector: #handleDefineMethod: properties: { 'class' -> 'string'. 'source' -> 'string'. 'protocol' -> 'string' } required: #('class' 'source').
-		self mcpTool: 'remove_class' description: 'Remove a class from the system.'
-			selector: #handleRemoveClass: properties: { 'name' -> 'string' } required: #('name').
-		self mcpTool: 'remove_method' description: 'Remove a method from a class.'
-			selector: #handleRemoveMethod: properties: { 'class' -> 'string'. 'selector' -> 'string'. 'is_class_method' -> 'string' } required: #('class' 'selector').
-		self mcpTool: 'rename_class' description: 'Rename a class and update all references across the image (uses the refactoring engine).'
-			selector: #handleRenameClass: properties: { 'old_name' -> 'string'. 'new_name' -> 'string' } required: #('old_name' 'new_name').
-		self mcpTool: 'run_test' description: 'Run tests for a class or package; structured pass/fail/error counts.'
-			selector: #handleRunTest: properties: { 'class_name' -> 'string'. 'package_name' -> 'string' } required: #().
-		self mcpTool: 'save_image' description: 'Save the Pharo image to disk. Optionally pass test_class or test_package to gate the save on tests: runs them first and saves only if all pass. Returns { saved, tests }.'
-			selector: #handleSaveImage: properties: { 'test_class' -> 'string'. 'test_package' -> 'string' } required: #().
-		self mcpTool: 'list_packages' description: 'List all package names.'
-			selector: #handleListPackages: properties: { } required: #().
-		self mcpTool: 'list_classes' description: 'List classes in a package.'
-			selector: #handleListClasses: properties: { 'package_name' -> 'string' } required: #('package_name').
-		self mcpTool: 'list_methods' description: 'List methods in a package.'
-			selector: #handleListMethods: properties: { 'package_name' -> 'string' } required: #('package_name').
-		self mcpTool: 'list_extended_classes' description: 'List extended classes in a package.'
-			selector: #handleListExtendedClasses: properties: { 'package_name' -> 'string' } required: #('package_name').
-		self mcpTool: 'get_class_source' description: 'Get the full source of a class.'
-			selector: #handleGetClassSource: properties: { 'class_name' -> 'string' } required: #('class_name').
-		self mcpTool: 'get_method_source' description: 'Get the source of a method. is_class_method=true for class-side.'
-			selector: #handleGetMethodSource: properties: { 'class_name' -> 'string'. 'method_name' -> 'string'. 'is_class_method' -> 'string' } required: #('class_name' 'method_name').
-		self mcpTool: 'get_class_comment' description: 'Get the comment of a class.'
-			selector: #handleGetClassComment: properties: { 'class_name' -> 'string' } required: #('class_name').
-		self mcpTool: 'search_classes_like' description: 'Find classes whose name starts with a query.'
-			selector: #handleSearchClassesLike: properties: { 'class_name_query' -> 'string' } required: #('class_name_query').
-		self mcpTool: 'search_methods_like' description: 'Find selectors starting with a query.'
-			selector: #handleSearchMethodsLike: properties: { 'method_name_query' -> 'string' } required: #('method_name_query').
-		self mcpTool: 'search_implementors' description: 'Find all implementors of a selector.'
-			selector: #handleSearchImplementors: properties: { 'method_name' -> 'string' } required: #('method_name').
-		self mcpTool: 'search_references' description: 'Find references to a selector or symbol.'
-			selector: #handleSearchReferences: properties: { 'program_symbol' -> 'string' } required: #('program_symbol').
-		self mcpTool: 'search_references_to_class' description: 'Find references to a class.'
-			selector: #handleSearchReferencesToClass: properties: { 'class_name' -> 'string' } required: #('class_name').
-		self mcpTool: 'search_traits_like' description: 'Find traits whose name starts with a query.'
-			selector: #handleSearchTraitsLike: properties: { 'trait_name_query' -> 'string' } required: #('trait_name_query').
-		self mcpTool: 'get_settings' description: 'Get the current server settings.'
-			selector: #handleGetSettings: properties: { } required: #().
-		self mcpTool: 'apply_settings' description: 'Apply server settings from a { settings: {...} } object.'
-			selector: #handleApplySettings: properties: { 'settings' -> 'object' } required: #('settings').
-		self mcpTool: 'export_package' description: 'Export a package to Tonel format at a filesystem path.'
-			selector: #handleExportPackage: properties: { 'package_name' -> 'string'. 'path' -> 'string' } required: #('package_name' 'path').
-		self mcpTool: 'import_package' description: 'Import a Tonel package from a filesystem path.'
-			selector: #handleImportPackage: properties: { 'package_name' -> 'string'. 'path' -> 'string' } required: #('package_name' 'path').
-		self mcpTool: 'install_project' description: 'Install a project via Metacello baseline from a repository URL.'
-			selector: #handleInstallProject: properties: { 'project_name' -> 'string'. 'repository_url' -> 'string'. 'load_groups' -> 'string' } required: #('project_name' 'repository_url') }
+		  (self
+			   mcpTool: 'eval'
+			   description:
+			   'Evaluate a Pharo Smalltalk expression and return the result.'
+			   selector: #handleEval:
+			   properties: { ('code' -> 'string') }
+			   required: #( 'code' )).
+		  (self
+			   mcpTool: 'define_class'
+			   description: 'Define (or redefine) a class.'
+			   selector: #handleDefineClass:
+			   properties: {
+					   ('class_name' -> 'string').
+					   ('superclass_name' -> 'string').
+					   ('fields' -> 'string').
+					   ('package_name' -> 'string') }
+			   required:
+			   #( 'class_name' 'superclass_name' 'fields' 'package_name' )).
+		  (self
+			   mcpTool: 'define_method'
+			   description: 'Compile a method into a class.'
+			   selector: #handleDefineMethod:
+			   properties: {
+					   ('class_name' -> 'string').
+					   ('source' -> 'string').
+					   ('protocol' -> 'string') }
+			   required: #( 'class_name' 'source' )).
+		  (self
+			   mcpTool: 'remove_class'
+			   description: 'Remove a class from the system.'
+			   selector: #handleRemoveClass:
+			   properties: { ('class_name' -> 'string') }
+			   required: #( 'class_name' )).
+		  (self
+			   mcpTool: 'remove_method'
+			   description: 'Remove a method from a class.'
+			   selector: #handleRemoveMethod:
+			   properties: {
+					   ('class_name' -> 'string').
+					   ('method_name' -> 'string').
+					   ('is_class_method' -> 'boolean') }
+			   required: #( 'class_name' 'method_name' )).
+		  (self
+			   mcpTool: 'rename_class'
+			   description:
+			   'Rename a class and update all references across the image (uses the refactoring engine).'
+			   selector: #handleRenameClass:
+			   properties: {
+					   ('class_name' -> 'string').
+					   ('new_class_name' -> 'string') }
+			   required: #( 'class_name' 'new_class_name' )).
+		  (self
+			   mcpTool: 'run_test'
+			   description:
+			   'Run tests for a class or package; structured pass/fail/error counts.'
+			   selector: #handleRunTest:
+			   properties: {
+					   ('class_name' -> 'string').
+					   ('package_name' -> 'string') }
+			   required: #(  )).
+		  (self
+			   mcpTool: 'save_image'
+			   description:
+			   'Save the Pharo image to disk. Optionally pass test_class or test_package to gate the save on tests: runs them first and saves only if all pass. Returns { saved, tests }.'
+			   selector: #handleSaveImage:
+			   properties: {
+					   ('test_class' -> 'string').
+					   ('test_package' -> 'string') }
+			   required: #(  )).
+		  (self
+			   mcpTool: 'list_packages'
+			   description: 'List all package names.'
+			   selector: #handleListPackages:
+			   properties: {  }
+			   required: #(  )).
+		  (self
+			   mcpTool: 'list_classes'
+			   description: 'List classes in a package.'
+			   selector: #handleListClasses:
+			   properties: { ('package_name' -> 'string') }
+			   required: #( 'package_name' )).
+		  (self
+			   mcpTool: 'list_methods'
+			   description: 'List methods in a package.'
+			   selector: #handleListMethods:
+			   properties: { ('package_name' -> 'string') }
+			   required: #( 'package_name' )).
+		  (self
+			   mcpTool: 'list_extended_classes'
+			   description: 'List extended classes in a package.'
+			   selector: #handleListExtendedClasses:
+			   properties: { ('package_name' -> 'string') }
+			   required: #( 'package_name' )).
+		  (self
+			   mcpTool: 'get_class_source'
+			   description: 'Get the full source of a class.'
+			   selector: #handleGetClassSource:
+			   properties: { ('class_name' -> 'string') }
+			   required: #( 'class_name' )).
+		  (self
+			   mcpTool: 'get_method_source'
+			   description:
+			   'Get the source of a method. is_class_method=true for class-side.'
+			   selector: #handleGetMethodSource:
+			   properties: {
+					   ('class_name' -> 'string').
+					   ('method_name' -> 'string').
+					   ('is_class_method' -> 'boolean') }
+			   required: #( 'class_name' 'method_name' )).
+		  (self
+			   mcpTool: 'get_class_comment'
+			   description: 'Get the comment of a class.'
+			   selector: #handleGetClassComment:
+			   properties: { ('class_name' -> 'string') }
+			   required: #( 'class_name' )).
+		  (self
+			   mcpTool: 'search_classes_like'
+			   description: 'Find classes whose name starts with a query.'
+			   selector: #handleSearchClassesLike:
+			   properties: { ('class_name_query' -> 'string') }
+			   required: #( 'class_name_query' )).
+		  (self
+			   mcpTool: 'search_methods_like'
+			   description: 'Find selectors starting with a query.'
+			   selector: #handleSearchMethodsLike:
+			   properties: { ('method_name_query' -> 'string') }
+			   required: #( 'method_name_query' )).
+		  (self
+			   mcpTool: 'search_implementors'
+			   description: 'Find all implementors of a selector.'
+			   selector: #handleSearchImplementors:
+			   properties: { ('method_name' -> 'string') }
+			   required: #( 'method_name' )).
+		  (self
+			   mcpTool: 'search_references'
+			   description: 'Find references to a selector or symbol.'
+			   selector: #handleSearchReferences:
+			   properties: { ('program_symbol' -> 'string') }
+			   required: #( 'program_symbol' )).
+		  (self
+			   mcpTool: 'search_references_to_class'
+			   description: 'Find references to a class.'
+			   selector: #handleSearchReferencesToClass:
+			   properties: { ('class_name' -> 'string') }
+			   required: #( 'class_name' )).
+		  (self
+			   mcpTool: 'search_traits_like'
+			   description: 'Find traits whose name starts with a query.'
+			   selector: #handleSearchTraitsLike:
+			   properties: { ('trait_name_query' -> 'string') }
+			   required: #( 'trait_name_query' )).
+		  (self
+			   mcpTool: 'get_settings'
+			   description: 'Get the current server settings.'
+			   selector: #handleGetSettings:
+			   properties: {  }
+			   required: #(  )).
+		  (self
+			   mcpTool: 'apply_settings'
+			   description:
+			   'Apply server settings from a { settings: {...} } object.'
+			   selector: #handleApplySettings:
+			   properties: { ('settings' -> 'object') }
+			   required: #( 'settings' )).
+		  (self
+			   mcpTool: 'export_package'
+			   description:
+			   'Export a package to Tonel format at a filesystem path.'
+			   selector: #handleExportPackage:
+			   properties: {
+					   ('package_name' -> 'string').
+					   ('path' -> 'string') }
+			   required: #( 'package_name' 'path' )).
+		  (self
+			   mcpTool: 'import_package'
+			   description: 'Import a Tonel package from a filesystem path.'
+			   selector: #handleImportPackage:
+			   properties: {
+					   ('package_name' -> 'string').
+					   ('path' -> 'string') }
+			   required: #( 'package_name' 'path' )).
+		  (self
+			   mcpTool: 'install_project'
+			   description:
+			   'Install a project via Metacello baseline from a repository URL.'
+			   selector: #handleInstallProject:
+			   properties: {
+					   ('project_name' -> 'string').
+					   ('repository_url' -> 'string').
+					   ('load_groups' -> 'string') }
+			   required: #( 'project_name' 'repository_url' )) }
 ]
 
 { #category : 'mcp - protocol' }

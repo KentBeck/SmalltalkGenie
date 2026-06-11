@@ -23,8 +23,8 @@ UI-inspection tools (`read_screen`) or any Morphic / Spec / Roassal code. If a
 task seems to need the screen, it's the wrong approach here.
 
 ## How to change code — tools ONLY
-- New class         → `define_class` (params: `name`, `superclass`, `fields`, `package`)
-- New / edit method → `define_method` (params: `class`, `source`, `protocol`)
+- New class         → `define_class` (params: `class_name`, `superclass_name`, `fields`, `package_name`)
+- New / edit method → `define_method` (params: `class_name`, `source`, `protocol`)
 - Rename a class    → `rename_class` (updates every reference via the refactoring engine)
 - Anything else     → `eval` with an explicit `compile:classified:` or a
   `ShiftClassInstaller` builder.

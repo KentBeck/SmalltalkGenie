@@ -44,10 +44,10 @@ GenieActionTest >> testApplyThenGetSettings [
 GenieActionTest >> testDefineClassActionCreatesClass [
 	| result cls |
 	result := self invoke: #handleDefineClass: with: {
-		'name' -> 'GenieFixtureFoo'.
-		'superclass' -> 'Object'.
+		'class_name' -> 'GenieFixtureFoo'.
+		'superclass_name' -> 'Object'.
 		'fields' -> 'a b'.
-		'package' -> 'Genie-Fixtures' } asDictionary.
+		'package_name' -> 'Genie-Fixtures' } asDictionary.
 	self assert: (result at: 'success').
 	self assert: (result at: 'result') equals: 'GenieFixtureFoo'.
 	cls := Smalltalk classNamed: 'GenieFixtureFoo'.
@@ -59,10 +59,10 @@ GenieActionTest >> testDefineClassActionCreatesClass [
 GenieActionTest >> testDefineClassUnknownSuperclassReportsError [
 	| result |
 	result := self invoke: #handleDefineClass: with: {
-		'name' -> 'GenieFixtureBar'.
-		'superclass' -> 'NoSuchSuperXYZ'.
+		'class_name' -> 'GenieFixtureBar'.
+		'superclass_name' -> 'NoSuchSuperXYZ'.
 		'fields' -> ''.
-		'package' -> 'Genie-Fixtures' } asDictionary.
+		'package_name' -> 'Genie-Fixtures' } asDictionary.
 	self deny: (result at: 'success').
 	self assert: (result includesKey: 'error')
 ]
@@ -71,10 +71,10 @@ GenieActionTest >> testDefineClassUnknownSuperclassReportsError [
 GenieActionTest >> testDefineMethodActionCompilesMethod [
 	| defResult cls |
 	self invoke: #handleDefineClass: with: {
-		'name' -> 'GenieFixtureFoo'. 'superclass' -> 'Object'.
-		'fields' -> ''. 'package' -> 'Genie-Fixtures' } asDictionary.
+		'class_name' -> 'GenieFixtureFoo'. 'superclass_name' -> 'Object'.
+		'fields' -> ''. 'package_name' -> 'Genie-Fixtures' } asDictionary.
 	defResult := self invoke: #handleDefineMethod: with: {
-		'class' -> 'GenieFixtureFoo'.
+		'class_name' -> 'GenieFixtureFoo'.
 		'source' -> 'double: x
 	^ x * 2'.
 		'protocol' -> 'arithmetic' } asDictionary.
@@ -88,8 +88,8 @@ GenieActionTest >> testDefineMethodActionCompilesMethod [
 { #category : 'tests' }
 GenieActionTest >> testDefineMethodFormatsSourceOnCompile [
 	| src |
-	self invoke: #handleDefineClass: with: { 'name' -> 'GenieFixtureFoo'. 'superclass' -> 'Object'. 'fields' -> ''. 'package' -> 'Genie-Fixtures' } asDictionary.
-	self invoke: #handleDefineMethod: with: { 'class' -> 'GenieFixtureFoo'. 'source' -> 'fmtProbe ^1+2'. 'protocol' -> 'tests' } asDictionary.
+	self invoke: #handleDefineClass: with: { 'class_name' -> 'GenieFixtureFoo'. 'superclass_name' -> 'Object'. 'fields' -> ''. 'package_name' -> 'Genie-Fixtures' } asDictionary.
+	self invoke: #handleDefineMethod: with: { 'class_name' -> 'GenieFixtureFoo'. 'source' -> 'fmtProbe ^1+2'. 'protocol' -> 'tests' } asDictionary.
 	src := ((Smalltalk classNamed: 'GenieFixtureFoo') >> #fmtProbe) sourceCode.
 	self assert: (src includesSubstring: '^ 1 + 2').
 	self deny: (src includesSubstring: '^1+2')
@@ -137,13 +137,13 @@ GenieActionTest >> testListClassesActionListsPackageClasses [
 GenieActionTest >> testRemoveClassActionRemovesClass [
 	| result |
 	self invoke: #handleDefineClass: with: {
-		'name' -> 'GenieFixtureBar'.
-		'superclass' -> 'Object'.
+		'class_name' -> 'GenieFixtureBar'.
+		'superclass_name' -> 'Object'.
 		'fields' -> ''.
-		'package' -> 'Genie-Fixtures' } asDictionary.
+		'package_name' -> 'Genie-Fixtures' } asDictionary.
 	self assert: (Smalltalk includesKey: #GenieFixtureBar).
 	result := self invoke: #handleRemoveClass: with: {
-		'name' -> 'GenieFixtureBar' } asDictionary.
+		'class_name' -> 'GenieFixtureBar' } asDictionary.
 	self assert: (result at: 'success').
 	self deny: (Smalltalk includesKey: #GenieFixtureBar)
 ]
@@ -152,15 +152,15 @@ GenieActionTest >> testRemoveClassActionRemovesClass [
 GenieActionTest >> testRemoveMethodActionRemovesMethod [
 	| result cls |
 	self invoke: #handleDefineClass: with: {
-		'name' -> 'GenieFixtureFoo'. 'superclass' -> 'Object'.
-		'fields' -> ''. 'package' -> 'Genie-Fixtures' } asDictionary.
+		'class_name' -> 'GenieFixtureFoo'. 'superclass_name' -> 'Object'.
+		'fields' -> ''. 'package_name' -> 'Genie-Fixtures' } asDictionary.
 	self invoke: #handleDefineMethod: with: {
-		'class' -> 'GenieFixtureFoo'. 'source' -> 'ping
+		'class_name' -> 'GenieFixtureFoo'. 'source' -> 'ping
 	^ 1'. 'protocol' -> 'tests' } asDictionary.
 	cls := Smalltalk classNamed: 'GenieFixtureFoo'.
 	self assert: (cls includesSelector: #ping).
 	result := self invoke: #handleRemoveMethod: with: {
-		'class' -> 'GenieFixtureFoo'. 'selector' -> 'ping' } asDictionary.
+		'class_name' -> 'GenieFixtureFoo'. 'method_name' -> 'ping' } asDictionary.
 	self assert: (result at: 'success').
 	self deny: (cls includesSelector: #ping)
 ]
@@ -168,11 +168,11 @@ GenieActionTest >> testRemoveMethodActionRemovesMethod [
 { #category : 'tests' }
 GenieActionTest >> testRenameClassRenamesAndUpdatesReferences [
 	| result |
-	self invoke: #handleDefineClass: with: { 'name' -> 'GenieFixtureFoo'. 'superclass' -> 'Object'. 'fields' -> ''. 'package' -> 'Genie-Fixtures' } asDictionary.
-	self invoke: #handleDefineClass: with: { 'name' -> 'GenieFixtureBar'. 'superclass' -> 'Object'. 'fields' -> ''. 'package' -> 'Genie-Fixtures' } asDictionary.
-	self invoke: #handleDefineMethod: with: { 'class' -> 'GenieFixtureBar'. 'source' -> 'makeFoo
+	self invoke: #handleDefineClass: with: { 'class_name' -> 'GenieFixtureFoo'. 'superclass_name' -> 'Object'. 'fields' -> ''. 'package_name' -> 'Genie-Fixtures' } asDictionary.
+	self invoke: #handleDefineClass: with: { 'class_name' -> 'GenieFixtureBar'. 'superclass_name' -> 'Object'. 'fields' -> ''. 'package_name' -> 'Genie-Fixtures' } asDictionary.
+	self invoke: #handleDefineMethod: with: { 'class_name' -> 'GenieFixtureBar'. 'source' -> 'makeFoo
 	^ GenieFixtureFoo new'. 'protocol' -> 'accessing' } asDictionary.
-	result := self invoke: #handleRenameClass: with: { 'old_name' -> 'GenieFixtureFoo'. 'new_name' -> 'GenieFixtureRenamed' } asDictionary.
+	result := self invoke: #handleRenameClass: with: { 'class_name' -> 'GenieFixtureFoo'. 'new_class_name' -> 'GenieFixtureRenamed' } asDictionary.
 	self assert: (result at: 'success').
 	self deny: (Smalltalk includesKey: 'GenieFixtureFoo' asSymbol).
 	self assert: (Smalltalk includesKey: 'GenieFixtureRenamed' asSymbol).
@@ -183,13 +183,13 @@ GenieActionTest >> testRenameClassRenamesAndUpdatesReferences [
 GenieActionTest >> testRunTestActionReportsStructuredResults [
 	| result inner |
 	self invoke: #handleDefineClass: with: {
-		'name' -> 'GenieFixtureBar'. 'superclass' -> 'TestCase'.
-		'fields' -> ''. 'package' -> 'Genie-Fixtures' } asDictionary.
+		'class_name' -> 'GenieFixtureBar'. 'superclass_name' -> 'TestCase'.
+		'fields' -> ''. 'package_name' -> 'Genie-Fixtures' } asDictionary.
 	self invoke: #handleDefineMethod: with: {
-		'class' -> 'GenieFixtureBar'. 'source' -> 'testPasses
+		'class_name' -> 'GenieFixtureBar'. 'source' -> 'testPasses
 	self assert: true'. 'protocol' -> 'tests' } asDictionary.
 	self invoke: #handleDefineMethod: with: {
-		'class' -> 'GenieFixtureBar'. 'source' -> 'testFails
+		'class_name' -> 'GenieFixtureBar'. 'source' -> 'testFails
 	self assert: false'. 'protocol' -> 'tests' } asDictionary.
 	result := self invoke: #handleRunTest: with: { 'class_name' -> 'GenieFixtureBar' } asDictionary.
 	self assert: (result at: 'success').
@@ -202,8 +202,8 @@ GenieActionTest >> testRunTestActionReportsStructuredResults [
 { #category : 'tests' }
 GenieActionTest >> testSaveImageGateBlocksWhenTestsFail [
 	| result inner |
-	self invoke: #handleDefineClass: with: { 'name' -> 'GenieFixtureBar'. 'superclass' -> 'TestCase'. 'fields' -> ''. 'package' -> 'Genie-Fixtures' } asDictionary.
-	self invoke: #handleDefineMethod: with: { 'class' -> 'GenieFixtureBar'. 'source' -> 'testAlwaysFails
+	self invoke: #handleDefineClass: with: { 'class_name' -> 'GenieFixtureBar'. 'superclass_name' -> 'TestCase'. 'fields' -> ''. 'package_name' -> 'Genie-Fixtures' } asDictionary.
+	self invoke: #handleDefineMethod: with: { 'class_name' -> 'GenieFixtureBar'. 'source' -> 'testAlwaysFails
 	self assert: false'. 'protocol' -> 'tests' } asDictionary.
 	result := self invoke: #handleSaveImage: with: { 'test_class' -> 'GenieFixtureBar' } asDictionary.
 	self assert: (result at: 'success').
