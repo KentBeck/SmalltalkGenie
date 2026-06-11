@@ -34,9 +34,11 @@ task seems to need the screen, it's the wrong approach here.
   `get_method_source` / `get_class_source`. Never assume success.
 - Use the modern class API (`ShiftClassInstaller`), not the deprecated
   `subclass:instanceVariableNames:classVariableNames:package:`.
-- On a freshly-loaded image, set the author ONCE up front — otherwise the
-  first compile blocks forever on a modal "author initials" dialog that a
-  headless `eval` can't answer: `Author fullName: 'YourName'`.
+- On **Pharo ≤ 12**, set the author ONCE up front — otherwise the first compile
+  blocks forever on a modal "author initials" dialog that a headless `eval`
+  can't answer: `Author fullName: 'YourName'`. **Pharo 13 removed the `Author`
+  class** (and that prompt), so skip this there — evaluating `Author fullName: …`
+  raises an *undeclared variable* error.
 
 ## How to orient (no files = the read tools ARE the filesystem)
 Treat these as `ls` / `cat` / `grep` and use them BEFORE changing anything.

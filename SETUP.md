@@ -33,9 +33,11 @@ Pin a specific commit for reproducibility by replacing `:main` with a SHA, e.g.
 `github://KentBeck/SmalltalkGenie:c2db995/src`. The baseline pulls its only
 dependencies — **Teapot** (HTTP) and **NeoJSON**.
 
-> On Pharo 9/12, set the author once so the first headless compile doesn't block
-> on the "author initials" modal: `Author fullName: 'YourName'`. On Pharo 13
-> there is no such prompt — this line is a harmless no-op.
+> On **Pharo ≤ 12**, set the author once so the first headless compile doesn't
+> block on the modal "author initials" dialog: `Author fullName: 'YourName'`.
+> **Pharo 13 removed the `Author` class** (and that dialog), so the step doesn't
+> apply there — evaluating `Author fullName: …` on 13 raises an *undeclared
+> variable* error. Just skip it.
 
 **Start it (first time only):**
 
