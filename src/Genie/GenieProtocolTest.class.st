@@ -7,6 +7,51 @@ Class {
 }
 
 { #category : 'tests' }
+GenieProtocolTest >> testAuthTokenOptInEnforcement [
+	| open secured |
+	open := GenieServer new.
+	self assert: (open headersAuthorized: Dictionary new).
+	secured := GenieServer new.
+	secured settings at: #authToken put: 'sekret'.
+	self deny: (secured headersAuthorized: Dictionary new).
+	self deny: (secured headersAuthorized: { 'Authorization' -> 'Bearer nope' } asDictionary).
+	self assert: (secured headersAuthorized: { 'Authorization' -> 'Bearer sekret' } asDictionary)
+]
+
+{ #category : 'tests' }
+GenieProtocolTest >> testBindingDefaultsToLoopback [
+	| server allIfaces |
+	server := GenieServer new.
+	self assert: server bindingInterface equals: '127.0.0.1'.
+	self assert: server bindingAddress notNil.
+	allIfaces := GenieServer new.
+	allIfaces settings at: #bindingInterface put: ''.
+	self assert: allIfaces bindingAddress isNil
+]
+
+{ #category : 'tests' }
+GenieProtocolTest >> testDangerousToolGateBlocksWhenDisabled [
+	| server blocked allowed |
+	server := GenieServer new.
+	server settings at: #allowDangerousTools put: false.
+	blocked := server mcpToolsCall: { 'name' -> 'eval'. 'arguments' -> { 'code' -> '1 + 1' } asDictionary } asDictionary id: 1.
+	self assert: (blocked includesKey: 'error').
+	server settings at: #allowDangerousTools put: true.
+	allowed := server mcpToolsCall: { 'name' -> 'eval'. 'arguments' -> { 'code' -> '1 + 1' } asDictionary } asDictionary id: 1.
+	self assert: (allowed includesKey: 'result')
+]
+
+{ #category : 'tests' }
+GenieProtocolTest >> testGetSettingsRedactsAuthToken [
+	| server result |
+	server := GenieServer new.
+	server settings at: #authToken put: 'topsecret'.
+	result := (server handleGetSettings: nil) at: 'result'.
+	self assert: (result at: #authToken) equals: '***set***'.
+	self deny: ((result at: #authToken) includesSubstring: 'topsecret')
+]
+
+{ #category : 'tests' }
 GenieProtocolTest >> testInitializeReturnsProtocolAndCapabilities [
 	| resp result |
 	resp := GenieServer new handleMcpMessage: {
@@ -22,6 +67,16 @@ GenieProtocolTest >> testInitializeReturnsProtocolAndCapabilities [
 GenieProtocolTest >> testNotificationReturnsNil [
 	self assert: (GenieServer new handleMcpMessage:
 		{ 'method' -> 'notifications/initialized' } asDictionary) isNil
+]
+
+{ #category : 'tests' }
+GenieProtocolTest >> testOriginCheckAllowsLocalRejectsRemote [
+	| server |
+	server := GenieServer new.
+	self assert: (server originAllowed: Dictionary new).
+	self assert: (server originAllowed: { 'Origin' -> 'http://localhost:8087' } asDictionary).
+	self assert: (server originAllowed: { 'Origin' -> 'http://127.0.0.1:8087' } asDictionary).
+	self deny: (server originAllowed: { 'Origin' -> 'http://evil.example.com' } asDictionary)
 ]
 
 { #category : 'tests' }

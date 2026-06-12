@@ -65,9 +65,35 @@ GenieServer class >> startUp: isImageStarting [
 	Smalltalk session addDeferredStartupAction: [ self current ]
 ]
 
+{ #category : 'security' }
+GenieServer >> allowDangerousTools [
+	^ self settings at: #allowDangerousTools ifAbsent: [ true ]
+]
+
 { #category : 'private' }
 GenieServer >> asCamelCase: aString [
 	^ (aString copyReplaceAll: '_' with: ' ') asCamelCase uncapitalized
+]
+
+{ #category : 'security' }
+GenieServer >> authToken [
+	^ self settings at: #authToken ifAbsent: [ '' ]
+]
+
+{ #category : 'security' }
+GenieServer >> bindingAddress [
+	"Socket address for the listening socket, from the bindingInterface setting.
+	 Empty string means all interfaces; the default is IPv4 loopback (127.0.0.1)."
+	| iface |
+	iface := self bindingInterface.
+	(iface isNil or: [ iface isEmpty ]) ifTrue: [ ^ nil ].
+	(iface = '127.0.0.1' or: [ iface asLowercase = 'localhost' ]) ifTrue: [ ^ NetNameResolver loopBackAddress ].
+	^ NetNameResolver addressForName: iface
+]
+
+{ #category : 'security' }
+GenieServer >> bindingInterface [
+	^ self settings at: #bindingInterface ifAbsent: [ '127.0.0.1' ]
 ]
 
 { #category : 'factory' }
@@ -75,6 +101,11 @@ GenieServer >> createTeapot [
 	^ (Teapot configure: self teapotConfig associations)
 		POST: '/mcp' -> [ :req | self handleMcpHttp: req ];
 		yourself
+]
+
+{ #category : 'security' }
+GenieServer >> dangerousToolNames [
+	^ #('eval' 'save_image' 'remove_class' 'remove_method')
 ]
 
 { #category : 'private' }
@@ -195,7 +226,12 @@ GenieServer >> handleGetMethodSource: request [
 
 { #category : 'handling' }
 GenieServer >> handleGetSettings: request [
-	^ self returnResultDo: [ self settings asDictionary ]
+	^ self returnResultDo: [
+		| dict |
+		dict := self settings asDictionary.
+		(dict includesKey: #authToken)
+			ifTrue: [ dict at: #authToken put: ((dict at: #authToken) isEmptyOrNil ifTrue: [ '' ] ifFalse: [ '***set***' ]) ].
+		dict ]
 ]
 
 { #category : 'handling' }
@@ -260,11 +296,11 @@ GenieServer >> handleListPackages: request [
 
 { #category : 'handling' }
 GenieServer >> handleMcpHttp: request [
-	| origin message response json resp negotiatedVersion |
-	origin := (request headers includesKey: 'Origin')
-		ifTrue: [ request headers at: 'Origin' ] ifFalse: [ nil ].
-	(origin notNil and: [ ((origin includesSubstring: 'localhost') or: [ origin includesSubstring: '127.0.0.1' ]) not ])
-		ifTrue: [ ^ ZnResponse new statusLine: (ZnStatusLine code: 403); yourself ].
+	| message response json resp negotiatedVersion |
+	(self originAllowed: request headers)
+		ifFalse: [ ^ ZnResponse new statusLine: (ZnStatusLine code: 403); yourself ].
+	(self headersAuthorized: request headers)
+		ifFalse: [ ^ ZnResponse new statusLine: (ZnStatusLine code: 401); yourself ].
 	message := NeoJSONReader fromString: request entity contents.
 	negotiatedVersion := (request headers includesKey: 'MCP-Protocol-Version')
 		ifTrue: [ request headers at: 'MCP-Protocol-Version' ]
@@ -429,6 +465,17 @@ GenieServer >> handleSearchTraitsLike: request [
 		lower := query asLowercase.
 		(Smalltalk globals allTraits select: [ :trait | trait name asLowercase beginsWith: lower ])
 			collect: [ :each | each name ] ]
+]
+
+{ #category : 'security' }
+GenieServer >> headersAuthorized: aHeaders [
+	"Opt-in bearer-token auth. With no authToken set every request is allowed;
+	 when set, the request must carry Authorization: Bearer <token>."
+	| token provided |
+	token := self authToken.
+	(token isNil or: [ token isEmpty ]) ifTrue: [ ^ true ].
+	provided := (aHeaders includesKey: 'Authorization') ifTrue: [ aHeaders at: 'Authorization' ] ifFalse: [ '' ].
+	^ provided = ('Bearer ' , token)
 ]
 
 { #category : 'mcp - protocol' }
@@ -664,6 +711,8 @@ GenieServer >> mcpToolSpecs [
 GenieServer >> mcpToolsCall: params id: anId [
 	| toolName arguments spec result text |
 	toolName := params at: 'name'.
+	(self allowDangerousTools not and: [ self dangerousToolNames includes: toolName ])
+		ifTrue: [ ^ self jsonRpcError: -32600 message: 'Tool disabled: ' , toolName , ' (allowDangerousTools is off)' id: anId ].
 	arguments := params at: 'arguments' ifAbsent: [ Dictionary new ].
 	spec := self mcpToolSpecs detect: [ :s | (s at: 'name') = toolName ] ifNone: [ nil ].
 	spec ifNil: [ ^ self jsonRpcError: -32602 message: 'Unknown tool: ' , toolName id: anId ].
@@ -681,6 +730,16 @@ GenieServer >> mcpToolsList: anId [
 		  'description' -> (spec at: 'description').
 		  'inputSchema' -> (spec at: 'inputSchema') } asDictionary ].
 	^ self jsonRpc: { 'tools' -> tools asArray } asDictionary id: anId
+]
+
+{ #category : 'security' }
+GenieServer >> originAllowed: aHeaders [
+	"Defense-in-depth against browser DNS-rebinding: reject a non-local Origin.
+	 Requests with no Origin header (curl, MCP clients) pass; the auth token is the real gate."
+	| origin |
+	origin := (aHeaders includesKey: 'Origin') ifTrue: [ aHeaders at: 'Origin' ] ifFalse: [ nil ].
+	origin ifNil: [ ^ true ].
+	^ (origin includesSubstring: 'localhost') or: [ origin includesSubstring: '127.0.0.1' ]
 ]
 
 { #category : 'accessing' }
@@ -778,6 +837,7 @@ GenieServer >> stackSize [
 
 { #category : 'actions' }
 GenieServer >> start [
+	self bindingAddress ifNotNil: [ :addr | self teapot server bindingAddress: addr ].
 	self teapot start
 ]
 

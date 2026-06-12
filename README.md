@@ -13,11 +13,11 @@ it, and each MCP tool call is a **wish** (`Wish` is the class that carries an
 incoming call's arguments). You never enter the lamp; you make wishes and the
 genie carries them out in its own world.
 
-> ⚠️ **Security: a running Genie server is an unauthenticated remote-code-execution
-> endpoint.** The `eval` tool runs arbitrary Smalltalk — i.e. arbitrary code — with
-> the full privileges of the process, and there is no authentication. Run it only on
-> a machine and image you trust, and never expose the port to an untrusted network.
-> Read **[Security](#security)** before you run it.
+> ⚠️ **Security: `eval` runs arbitrary code.** A client that can reach the server has
+> the full power of the Pharo process. By default the server binds to **loopback only**
+> (no network access) and checks the `Origin` header; optional **token auth** and
+> **dangerous-tool gating** harden it further. Run it only on a machine and image you
+> trust. See **[Security](#security)**.
 
 ## Install
 
@@ -77,36 +77,43 @@ The genie grants 26 wishes over MCP:
 
 ## Security
 
-**Treat a running Genie server as an open, unauthenticated remote shell on the
-host.** That is what it is, by design — the whole point is to let a client program
-a live image — so the responsibility for containing it is yours.
+Genie exists to let a client program a live image, so **a client that can reach the
+server has the full power of the Pharo process.** `eval` compiles and runs arbitrary
+Smalltalk (`handleEval:` is literally `compiler evaluate: code`): read, write, or
+delete any file the user can, open sockets, spawn processes, modify or wipe the
+image. The "go only through the tools" rule in `CLAUDE.md` is guidance to a
+cooperating agent, **not a sandbox**. So the real job is containing *who can reach
+the server*.
 
-- **`eval` is arbitrary code execution.** It compiles and runs any Smalltalk you
-  send (`handleEval:` is literally `compiler evaluate: code`). Through it a caller
-  can read, write, or delete any file the user can, open network connections, spawn
-  OS processes, exfiltrate data, and modify or wipe the image. The narrower tools
-  (`define_method`, `remove_class`, `save_image`, …) still let a caller rewrite the
-  running system.
-- **The "go only through the tools" rule in `CLAUDE.md` is not a sandbox.** It is
-  guidance to a cooperating agent. A confused, jailbroken, or prompt-injected agent —
-  or anything else that reaches the port — can call `eval` and do anything. There is
-  no allow-list and no capability restriction.
-- **No authentication.** Any client that can open a TCP connection to the port and
-  send a JSON body is fully trusted. There is no token, password, or handshake.
-- **The `Origin` check is narrow.** The server rejects (403) requests whose HTTP
-  `Origin` header isn't `localhost`/`127.0.0.1`, which blocks malicious *web pages*
-  (cross-origin / DNS-rebinding via a browser). But a non-browser client — `curl`, a
-  script, another MCP client — sends no `Origin` header, so the check is skipped and
-  the request is served.
-- **Not bound to loopback.** The listening socket sets no binding interface, so the
-  port may be reachable from your network, not just your machine.
+**Safe by default:**
 
-Practical rules:
+- **Loopback-only binding.** The listening socket binds to `127.0.0.1`, so the
+  server is not reachable over the network — only from processes on the same
+  machine. (Takes effect when the image next starts.)
+- **Origin check.** Requests whose HTTP `Origin` header isn't local are rejected
+  (403), blocking browser DNS-rebinding. This is defense-in-depth, *not* access
+  control — non-browser clients (`curl`, scripts, MCP clients) send no `Origin` and
+  aren't gated by it; the token below is the real gate.
 
-- Run Genie only on a machine you trust, in an image you can afford to lose.
-- Don't load it into an image holding secrets, credentials, or production data.
-- Keep the port (`8087`) off untrusted networks — firewall it or bind it to
-  loopback. **Never expose it to the public internet.**
+**Opt-in hardening** — settings, applied via `apply_settings` or
+`GenieServer current settings at: #key put: value` (save the image to persist):
+
+- **`authToken`** — set a non-empty token to require `Authorization: Bearer <token>`
+  on every request (401 otherwise); off by default. Use it to stop *other local
+  processes* from driving the image. Configure your client to send the header, e.g.
+  `claude mcp add --transport http genie http://localhost:8087/mcp --header
+  "Authorization: Bearer <token>"`. (`get_settings` redacts the token.)
+- **`allowDangerousTools`** — `true` by default; set `false` to refuse the most
+  dangerous tools (`eval`, `save_image`, `remove_class`, `remove_method`) for a
+  read-mostly deployment.
+- **`bindingInterface`** — `'127.0.0.1'` by default; set `''` to bind all interfaces
+  (only if you knowingly want remote access), or another address. Applies on restart.
+
+**Still your responsibility:**
+
+- Run Genie only on a machine you trust, in an image you can afford to lose; don't
+  load it into an image holding secrets, credentials, or production data.
+- Never expose the port to an untrusted network or the public internet.
 - Only connect clients/agents you trust, and review what they run.
 - For untrusted or experimental use, run the whole image inside a throwaway VM or
   container.
@@ -115,9 +122,8 @@ Practical rules:
 
 - **Direct, no bridge.** The image is the MCP endpoint. Plain `application/json`
   request/response over a single `POST /mcp` (no SSE required); protocol version
-  `2025-11-25`. Validates the `Origin` header to block browser cross-origin
-  requests — but there is **no authentication** and the socket is not restricted to
-  loopback; see [Security](#security).
+  `2025-11-25`. Binds to loopback by default and validates the `Origin` header;
+  optional token auth and dangerous-tool gating — see [Security](#security).
 - **Headless, code-only.** No Morphic / Spec / Roassal, no screen inspection.
 - **Self-contained.** Depends only on Teapot, NeoJSON, and base Pharo.
 

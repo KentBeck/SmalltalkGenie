@@ -24,6 +24,11 @@ GenieSettings >> at: aKey [
 ]
 
 { #category : 'accessing' }
+GenieSettings >> at: aKey ifAbsent: aBlock [
+	^ data at: aKey ifAbsent: aBlock
+]
+
+{ #category : 'accessing' }
 GenieSettings >> at: aKey put: aValue [
 	^ data at: aKey put: aValue
 ]
@@ -32,6 +37,9 @@ GenieSettings >> at: aKey put: aValue [
 GenieSettings >> initializeDefaults [
 	data := Dictionary new.
 	data at: #stackSize put: 100.
+	data at: #bindingInterface put: '127.0.0.1'.
+	data at: #authToken put: ''.
+	data at: #allowDangerousTools put: true.
 	^ self
 ]
 
