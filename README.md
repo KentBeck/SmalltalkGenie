@@ -100,12 +100,17 @@ the server*.
 
 - **`authToken`** — set a non-empty token to require `Authorization: Bearer <token>`
   on every request (401 otherwise); off by default. Use it to stop *other local
-  processes* from driving the image. Configure your client to send the header, e.g.
+  processes* from driving the image. **Enable it in this order so you don't lock
+  yourself out** (it takes effect on the very next request): add the header to your
+  client and restart the client *first* — it's ignored while no token is set —
   `claude mcp add --transport http genie http://localhost:8087/mcp --header
-  "Authorization: Bearer <token>"`. (`get_settings` redacts the token.)
+  "Authorization: Bearer <token>"`, *then* set `authToken`, *then* save the image.
+  (`get_settings` redacts the token.)
 - **`allowDangerousTools`** — `true` by default; set `false` to refuse the most
   dangerous tools (`eval`, `save_image`, `remove_class`, `remove_method`) for a
-  read-mostly deployment.
+  read-mostly deployment. Note that this also blocks `save_image` itself, so persist
+  the change by saving the image directly (Pharo menu / `Smalltalk snapshot:`) rather
+  than through the tool.
 - **`bindingInterface`** — `'127.0.0.1'` by default; set `''` to bind all interfaces
   (only if you knowingly want remote access), or another address. Applies on restart.
 
