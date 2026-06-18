@@ -1,14 +1,15 @@
 # Setting up and working with Genie
 
 A complete walk-through: load the server into a Pharo image, connect an MCP
-client, install the agent's working agreement (`CLAUDE.md` + skills), and run the
+client, install or scaffold the agent's working agreement, and run the
 day-to-day loop.
 
 Genie has **two halves** that meet over HTTP on `localhost:8087`:
 
 - the **Pharo image** runs `GenieServer` — the MCP server (the genie in the lamp);
 - an **MCP client** (e.g. Claude Code) connects to it, together with the
-  `CLAUDE.md` + skills that tell the agent how to drive the image safely.
+  agent instructions and skills that tell the agent how to drive the image
+  safely.
 
 You set up each half once. Then you make wishes.
 
@@ -90,7 +91,7 @@ prefix — `eval`, `define_class`, `define_method`, `run_test`, `save_image`, th
 
 ---
 
-## 3 — Install the working agreement (`CLAUDE.md` + skills)
+## 3 — Install the working agreement
 
 Genie hands the agent a **live image with no source files**. The `CLAUDE.md` and
 skills encode the discipline that makes that safe: the image is the single source
@@ -98,13 +99,12 @@ of truth, change code *only* through the tools, never edit files, run tests
 constantly, save only through the test-gated `save_image`, stay headless. Without
 them an agent will reach for files that aren't there and drift from the image.
 
-The repo ships three pieces:
+The repo ships two layers:
 
-- **`CLAUDE.md`** — the working agreement (orient → change-via-tools → test →
-  gated save).
-- **`.claude/skills/pharo-tdd/SKILL.md`** — the red → green → refactor loop.
-- **`.claude/skills/pharo-refactor/SKILL.md`** — safe, behavior-preserving
-  restructuring.
+- **For working on Genie itself:** root `CLAUDE.md`, `AGENTS.md` (symlinked to
+  `CLAUDE.md`), `GEMINI.md`, and `.claude/skills/`.
+- **For user projects:** `scripts/genie-init`, `agents/`, and
+  `docs/new-user.md`.
 
 Where they go depends on what you're doing:
 
@@ -115,26 +115,31 @@ Clone this repo and run Claude Code in it. It picks up the root `CLAUDE.md` and
 
 ### B) Using Genie to drive your *own* Pharo project
 
-Copy the files into that project:
+Use the scaffold so project instructions and Genie instructions stay separate:
+
+```bash
+./scripts/genie-init ~/work/your-project --prefix YourProject
+```
+
+The scaffold creates:
 
 ```
 your-project/
-  CLAUDE.md                          ← copy of Genie's, edited (see below)
-  .claude/
-    settings.local.json              ← { "permissions": { "allow": ["mcp__genie__*"] } }
-    skills/
-      pharo-tdd/SKILL.md
-      pharo-refactor/SKILL.md
+  AGENTS.md
+  CLAUDE.md
+  GEMINI.md
+  .agents/skills/pharo-live-image
+  .genie/agent-instructions.md
+  .genie/project.ston
 ```
 
-Then edit the copied `CLAUDE.md`:
+If the target project already has its own `AGENTS.md`, `CLAUDE.md`, or
+`GEMINI.md`, the scaffold preserves those files by default and writes the
+Genie-specific bootloader under `.genie/agent-instructions.md`. Use
+`--append-agent-files` to append a small marked pointer block to existing agent
+files. Use `--copy` if you want to vendor the skill instead of symlinking it.
 
-- change the gated-save example `save_image {test_package: 'Genie'}` to **your**
-  package name;
-- replace the "Working on Genie" framing with your project's;
-- keep everything else — the tool-only / TDD / headless rules apply to any image.
-
-The two skills are project-agnostic; copy them as-is.
+See [docs/new-user.md](docs/new-user.md) for the first-user workflow.
 
 ---
 

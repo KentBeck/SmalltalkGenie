@@ -58,6 +58,20 @@ For a full walk-through — auto-start, lifecycle commands, connecting the clien
 and installing the agent's working files (`CLAUDE.md` + skills) so it drives the
 image safely — see **[SETUP.md](SETUP.md)**.
 
+## Start a User Project
+
+To use Genie on a separate Smalltalk project without mixing project code with
+Genie server code, scaffold a project workspace:
+
+```bash
+./scripts/genie-init ~/work/my-smalltalk-project --prefix MyProject
+```
+
+The scaffold creates project-local agent bootloaders for Claude, Codex, and
+Gemini, a `.genie/project.ston` ownership file, and a
+`.agents/skills/pharo-live-image` link/copy. Start your agent from the project
+directory, not from this Genie repository. See **[docs/new-user.md](docs/new-user.md)**.
+
 ## Tools
 
 The genie grants 26 wishes over MCP:

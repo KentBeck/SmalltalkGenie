@@ -1,0 +1,226 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  genie-init PROJECT_DIR --prefix PACKAGE_PREFIX [options]
+
+Options:
+  --prefix NAME      Required. Project package prefix, e.g. MyProject.
+  --name NAME        Project display name. Defaults to PROJECT_DIR basename.
+  --port PORT        Genie MCP port. Defaults to 8087.
+  --copy             Copy skill files instead of symlinking them.
+  --append-agent-files
+                    Append a small Genie pointer block to existing AGENTS.md,
+                    CLAUDE.md, or GEMINI.md files. By default existing files
+                    are left untouched.
+  --force            Overwrite existing scaffold files.
+  -h, --help         Show this help.
+
+Creates a new Genie-backed project workspace with:
+  AGENTS.md, CLAUDE.md, GEMINI.md
+  .agents/skills/pharo-live-image
+  .genie/project.ston
+USAGE
+}
+
+die() {
+  echo "genie-init: $*" >&2
+  exit 1
+}
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+genie_root="$(cd "$script_dir/.." && pwd)"
+
+project_dir=""
+project_name=""
+package_prefix=""
+port="8087"
+copy_mode="false"
+force="false"
+append_agent_files="false"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --prefix)
+      [[ $# -ge 2 ]] || die "--prefix requires a value"
+      package_prefix="$2"
+      shift 2
+      ;;
+    --name)
+      [[ $# -ge 2 ]] || die "--name requires a value"
+      project_name="$2"
+      shift 2
+      ;;
+    --port)
+      [[ $# -ge 2 ]] || die "--port requires a value"
+      port="$2"
+      shift 2
+      ;;
+    --copy)
+      copy_mode="true"
+      shift
+      ;;
+    --append-agent-files)
+      append_agent_files="true"
+      shift
+      ;;
+    --force)
+      force="true"
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -*)
+      die "unknown option: $1"
+      ;;
+    *)
+      [[ -z "$project_dir" ]] || die "only one PROJECT_DIR is allowed"
+      project_dir="$1"
+      shift
+      ;;
+  esac
+done
+
+[[ -n "$project_dir" ]] || { usage >&2; exit 1; }
+[[ -n "$package_prefix" ]] || die "--prefix is required"
+
+project_dir="${project_dir/#\~/$HOME}"
+project_name="${project_name:-$(basename "$project_dir")}"
+test_package="${package_prefix}-Tests"
+skill_source="$genie_root/agents/skills/pharo-live-image"
+
+[[ -d "$skill_source" ]] || die "missing skill source: $skill_source"
+
+write_file() {
+  local path="$1"
+  local content="$2"
+  if [[ -e "$path" && "$force" != "true" ]]; then
+    die "$path already exists; rerun with --force to overwrite"
+  fi
+  mkdir -p "$(dirname "$path")"
+  printf "%s" "$content" > "$path"
+}
+
+write_file_if_missing() {
+  local path="$1"
+  local content="$2"
+  if [[ -e "$path" && "$force" != "true" ]]; then
+    echo "Preserved existing $path; rerun with --force to overwrite." >&2
+    return
+  fi
+  write_file "$path" "$content"
+}
+
+render_adapter() {
+  local template="$1"
+  sed \
+    -e "s/__PACKAGE_PREFIX__/$package_prefix/g" \
+    -e "s/__TEST_PACKAGE__/$test_package/g" \
+    "$template"
+}
+
+genie_pointer_block() {
+  cat <<EOF
+
+<!-- BEGIN GENIE MCP -->
+## Genie MCP
+
+This project uses Genie for live Pharo development. Before changing Smalltalk
+code, read:
+
+- \`.genie/agent-instructions.md\`
+- \`.agents/skills/pharo-live-image/SKILL.md\`
+- \`.genie/project.ston\`
+
+Only modify packages listed in \`.genie/project.ston\` unless explicitly asked
+to work on Genie itself.
+<!-- END GENIE MCP -->
+EOF
+}
+
+install_adapter() {
+  local adapter="$1"
+  local path="$project_dir/$adapter"
+  local rendered
+  rendered="$(render_adapter "$genie_root/agents/adapters/$adapter")"
+
+  if [[ ! -e "$path" || "$force" == "true" ]]; then
+    write_file "$path" "$rendered"
+    return
+  fi
+
+  if [[ "$append_agent_files" == "true" ]]; then
+    if grep -q "<!-- BEGIN GENIE MCP -->" "$path"; then
+      echo "Skipped $path; Genie pointer block already exists." >&2
+    else
+      genie_pointer_block >> "$path"
+      echo "Appended Genie pointer block to $path" >&2
+    fi
+  else
+    echo "Preserved existing $path; see .genie/agent-instructions.md" >&2
+  fi
+}
+
+mkdir -p "$project_dir"
+
+for adapter in AGENTS.md CLAUDE.md GEMINI.md; do
+  install_adapter "$adapter"
+done
+
+write_file_if_missing "$project_dir/.genie/project.ston" "{
+  #projectName : '$project_name',
+  #packagePrefix : '$package_prefix',
+  #testPackage : '$test_package',
+  #mcpPort : $port,
+  #mcpUrl : 'http://localhost:$port/mcp',
+  #serverPackage : 'Genie',
+  #ownedPackages : [ '$package_prefix', '$test_package' ]
+}
+"
+
+write_file_if_missing "$project_dir/.genie/agent-instructions.md" "$(render_adapter "$genie_root/agents/adapters/AGENTS.md")
+
+## Existing Agent Files
+
+If this project already has its own AGENTS.md, CLAUDE.md, or GEMINI.md, keep
+that file as the project-owned authority and add only a short pointer to this
+file. Rerun genie-init with --append-agent-files to append a marked pointer
+block automatically.
+"
+
+mkdir -p "$project_dir/.agents/skills"
+skill_target="$project_dir/.agents/skills/pharo-live-image"
+if [[ -e "$skill_target" || -L "$skill_target" ]]; then
+  if [[ "$force" == "true" ]]; then
+    rm -rf "$skill_target"
+  else
+    echo "Preserved existing $skill_target; rerun with --force to overwrite." >&2
+  fi
+fi
+
+if [[ ! -e "$skill_target" && ! -L "$skill_target" ]]; then
+  if [[ "$copy_mode" == "true" ]]; then
+    cp -R "$skill_source" "$skill_target"
+  else
+    ln -s "$skill_source" "$skill_target"
+  fi
+fi
+
+cat <<EOF
+Created Genie project scaffold:
+  $project_dir
+
+Package prefix:
+  $package_prefix
+
+Next steps:
+  1. Start the Genie Pharo image so http://localhost:$port/mcp is reachable.
+  2. cd "$project_dir"
+  3. Start Claude, Codex, or Gemini from that project directory.
+  4. If you preserved existing agent files, add a pointer to .genie/agent-instructions.md.
+  5. Ask the agent to create the first class in package $package_prefix with tests in $test_package.
+EOF
