@@ -180,6 +180,44 @@ GenieActionTest >> testRenameClassRenamesAndUpdatesReferences [
 ]
 
 { #category : 'tests' }
+GenieActionTest >> testRenameMethodActionRenamesAndUpdatesReferences [
+
+	| result fooClass barClass |
+	self invoke: #handleDefineClass: with: {
+			('class_name' -> 'GenieFixtureFoo').
+			('superclass_name' -> 'Object').
+			('fields' -> '').
+			('package_name' -> 'Genie-Fixtures') } asDictionary.
+	self invoke: #handleDefineClass: with: {
+			('class_name' -> 'GenieFixtureBar').
+			('superclass_name' -> 'Object').
+			('fields' -> '').
+			('package_name' -> 'Genie-Fixtures') } asDictionary.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieFixtureFoo').
+			('source' -> 'oldValue
+	^ 42').
+			('protocol' -> 'accessing') } asDictionary.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieFixtureBar').
+			('source' -> 'useFoo
+	^ GenieFixtureFoo new oldValue').
+			('protocol' -> 'accessing') } asDictionary.
+	result := self invoke: #handleRenameMethod: with: {
+			          ('class_name' -> 'GenieFixtureFoo').
+			          ('method_name' -> 'oldValue').
+			          ('new_method_name' -> 'renamedValue') } asDictionary.
+	self assert: (result at: 'success').
+	fooClass := Smalltalk classNamed: 'GenieFixtureFoo'.
+	barClass := Smalltalk classNamed: 'GenieFixtureBar'.
+	self deny: (fooClass includesSelector: 'oldValue' asSymbol).
+	self assert: (fooClass includesSelector: 'renamedValue' asSymbol).
+	self assert:
+		((barClass >> #useFoo) sourceCode includesSubstring: 'renamedValue').
+	self assert: barClass new useFoo equals: 42
+]
+
+{ #category : 'tests' }
 GenieActionTest >> testRunTestActionReportsStructuredResults [
 	| result inner |
 	self invoke: #handleDefineClass: with: {

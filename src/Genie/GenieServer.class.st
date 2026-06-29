@@ -367,6 +367,46 @@ GenieServer >> handleRenameClass: request [
 		newName ]
 ]
 
+{ #category : 'handlers' }
+GenieServer >> handleRenameMethod: request [
+
+	^ self returnResultDo: [
+			  | className oldSelector newSelector isClassSide targetClass permutation refactoringClass |
+			  className := request at: #class_name.
+			  oldSelector := (request at: #method_name) asSymbol.
+			  newSelector := (request at: #new_method_name) asSymbol.
+			  isClassSide := (request at: #is_class_method ifAbsent: [ false ])
+			                 == true.
+			  targetClass := Smalltalk classNamed: className.
+			  targetClass ifNil: [ self error: 'Unknown class: ' , className ].
+			  isClassSide ifTrue: [ targetClass := targetClass class ].
+			  (targetClass includesSelector: oldSelector) ifFalse: [
+					  self error:
+						  'No such method: ' , className , '>>' , oldSelector asString ].
+			  oldSelector numArgs = newSelector numArgs ifFalse: [
+					  self error:
+						  'Selectors must have the same arity: ' , oldSelector asString
+						  , ' and ' , newSelector asString ].
+			  permutation := request
+				                 at: #permutation
+				                 ifAbsent: [ 1 to: oldSelector numArgs ].
+			  permutation := permutation collect: [ :each | each asInteger ].
+			  refactoringClass := (Smalltalk includesKey:
+				                       #ReRenameMethodRefactoring)
+				                      ifTrue: [
+				                      Smalltalk classNamed:
+					                      #ReRenameMethodRefactoring ]
+				                      ifFalse: [
+				                      Smalltalk classNamed:
+					                      #RBRenameMethodTransformation ].
+			  (refactoringClass
+				   renameMethod: oldSelector
+				   in: targetClass
+				   to: newSelector
+				   permutation: permutation) execute.
+			  newSelector asString ]
+]
+
 { #category : 'handling' }
 GenieServer >> handleRunTest: request [
 	^ self returnResultDo: [
@@ -565,6 +605,18 @@ GenieServer >> mcpToolSpecs [
 					   ('class_name' -> 'string').
 					   ('new_class_name' -> 'string') }
 			   required: #( 'class_name' 'new_class_name' )).
+		  (self
+			   mcpTool: 'rename_method'
+			   description:
+			   'Rename a method and update senders across the image (uses the refactoring engine). Same-arity renames use identity argument order unless permutation is supplied.'
+			   selector: #handleRenameMethod:
+			   properties: {
+					   ('class_name' -> 'string').
+					   ('method_name' -> 'string').
+					   ('new_method_name' -> 'string').
+					   ('is_class_method' -> 'boolean').
+					   ('permutation' -> 'array') }
+			   required: #( 'class_name' 'method_name' 'new_method_name' )).
 		  (self
 			   mcpTool: 'run_test'
 			   description:

@@ -80,6 +80,27 @@ GenieProtocolTest >> testOriginCheckAllowsLocalRejectsRemote [
 ]
 
 { #category : 'tests' }
+GenieProtocolTest >> testRenameMethodToolSchemaHasRequiredFields [
+
+	| resp renameMethodTool schema required properties |
+	resp := GenieServer new handleMcpMessage: {
+			        ('method' -> 'tools/list').
+			        ('id' -> 2) } asDictionary.
+	renameMethodTool := ((resp at: 'result') at: 'tools') detect: [ :t |
+		                    (t at: 'name') = 'rename_method' ].
+	schema := renameMethodTool at: 'inputSchema'.
+	required := schema at: 'required'.
+	properties := schema at: 'properties'.
+	self assert: (schema at: 'type') equals: 'object'.
+	self assert: (required includes: 'class_name').
+	self assert: (required includes: 'method_name').
+	self assert: (required includes: 'new_method_name').
+	self
+		assert: ((properties at: 'permutation') at: 'type')
+		equals: 'array'
+]
+
+{ #category : 'tests' }
 GenieProtocolTest >> testToolsCallEvalReturnsTextContent [
 	| resp result content |
 	resp := GenieServer new handleMcpMessage: {
@@ -94,12 +115,80 @@ GenieProtocolTest >> testToolsCallEvalReturnsTextContent [
 ]
 
 { #category : 'tests' }
+GenieProtocolTest >> testToolsCallRenameMethodUpdatesSenders [
+
+	| cleanup server request resp result content fooClass barClass |
+	cleanup := [
+		           #( 'GenieFixtureFoo' 'GenieFixtureBar' 'GenieFixtureRenamed' )
+			           do: [ :nm |
+					           (Smalltalk classNamed: nm) ifNotNil: [ :c |
+						           c removeFromSystem ].
+					           Undeclared removeKey: nm asSymbol ifAbsent: [ nil ] ].
+		           (GenieServer new packageOrganizer
+			            packageNamed: 'Genie-Fixtures'
+			            ifAbsent: [ nil ]) ifNotNil: [ :p | p removeFromSystem ] ].
+	cleanup value.
+	[
+		(Smalltalk includesKey: #Author) ifTrue: [
+			(Smalltalk classNamed: #Author) fullName: 'Genie' ].
+		server := GenieServer new.
+		request := [ :dict | Wish new setArguments: dict asDictionary ].
+		server handleDefineClass: (request value: {
+					 ('class_name' -> 'GenieFixtureFoo').
+					 ('superclass_name' -> 'Object').
+					 ('fields' -> '').
+					 ('package_name' -> 'Genie-Fixtures') }).
+		server handleDefineClass: (request value: {
+					 ('class_name' -> 'GenieFixtureBar').
+					 ('superclass_name' -> 'Object').
+					 ('fields' -> '').
+					 ('package_name' -> 'Genie-Fixtures') }).
+		server handleDefineMethod: (request value: {
+					 ('class_name' -> 'GenieFixtureFoo').
+					 ('source' -> 'oldValue
+	^ 42').
+					 ('protocol' -> 'accessing') }).
+		server handleDefineMethod: (request value: {
+					 ('class_name' -> 'GenieFixtureBar').
+					 ('source' -> 'useFoo
+	^ GenieFixtureFoo new oldValue').
+					 ('protocol' -> 'accessing') }).
+		resp := server handleMcpMessage: {
+				        ('method' -> 'tools/call').
+				        ('id' -> 5).
+				        ('params' -> {
+					         ('name' -> 'rename_method').
+					         ('arguments' -> {
+						          ('class_name' -> 'GenieFixtureFoo').
+						          ('method_name' -> 'oldValue').
+						          ('new_method_name' -> 'renamedValue') } asDictionary) }
+					         asDictionary) } asDictionary.
+		result := resp at: 'result'.
+		content := result at: 'content'.
+		self deny: (result at: 'isError').
+		self assert:
+			((content first at: 'text') includesSubstring: 'renamedValue').
+		fooClass := Smalltalk classNamed: 'GenieFixtureFoo'.
+		barClass := Smalltalk classNamed: 'GenieFixtureBar'.
+		self deny: (fooClass includesSelector: 'oldValue' asSymbol).
+		self assert: (fooClass includesSelector: 'renamedValue' asSymbol).
+		self assert:
+			((barClass >> #useFoo) sourceCode includesSubstring: 'renamedValue') ]
+		ensure: [ cleanup value ]
+]
+
+{ #category : 'tests' }
 GenieProtocolTest >> testToolsListIncludesCoreTools [
+
 	| resp names |
-	resp := GenieServer new handleMcpMessage: { 'method' -> 'tools/list'. 'id' -> 2 } asDictionary.
-	names := ((resp at: 'result') at: 'tools') collect: [ :t | t at: 'name' ].
+	resp := GenieServer new handleMcpMessage: {
+			        ('method' -> 'tools/list').
+			        ('id' -> 2) } asDictionary.
+	names := ((resp at: 'result') at: 'tools') collect: [ :t |
+		         t at: 'name' ].
 	self assert: (names includes: 'eval').
 	self assert: (names includes: 'define_class').
+	self assert: (names includes: 'rename_method').
 	self assert: (names includes: 'run_test')
 ]
 

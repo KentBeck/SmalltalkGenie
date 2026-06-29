@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pharo Rename Method"
+  short_description: "Use Genie rename_method safely."
+  default_prompt: "Use the rename_method MCP refactoring to rename a Pharo selector and update senders."
