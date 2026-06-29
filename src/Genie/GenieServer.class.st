@@ -392,13 +392,13 @@ GenieServer >> handleRenameMethod: request [
 				                 ifAbsent: [ 1 to: oldSelector numArgs ].
 			  permutation := permutation collect: [ :each | each asInteger ].
 			  refactoringClass := (Smalltalk includesKey:
-				                       #ReRenameMethodRefactoring)
+				                       #RBRenameMethodTransformation)
 				                      ifTrue: [
 				                      Smalltalk classNamed:
-					                      #ReRenameMethodRefactoring ]
+					                      #RBRenameMethodTransformation ]
 				                      ifFalse: [
 				                      Smalltalk classNamed:
-					                      #RBRenameMethodTransformation ].
+					                      #ReRenameMethodRefactoring ].
 			  (refactoringClass
 				   renameMethod: oldSelector
 				   in: targetClass

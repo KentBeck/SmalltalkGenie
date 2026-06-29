@@ -18,6 +18,12 @@ bridge: `mcp__genie__eval`, `…__define_class`, `…__define_method`,
 (structured pass/fail), `…__save_image` (test-gated), and reads/searches
 `…__list_classes`, `…__get_method_source`, `…__search_*`, etc.
 
+**Prefer specific MCP tools over `eval`.** Before using `eval`, check whether
+the server already exposes a dedicated tool for the operation (`remove_class`,
+`remove_method`, `rename_class`, `export_package`, `run_test`, `save_image`,
+reads/searches, settings, etc.). Use `eval` only as a last resort for image-side
+glue that has no MCP message yet, and keep it minimal and explicit.
+
 **Genie is fully headless — no UI, ever.** The server is code-only. Do NOT add
 UI-inspection tools (`read_screen`) or any Morphic / Spec / Roassal code. If a
 task seems to need the screen, it's the wrong approach here.
@@ -26,8 +32,11 @@ task seems to need the screen, it's the wrong approach here.
 - New class         → `define_class` (params: `class_name`, `superclass_name`, `fields`, `package_name`)
 - New / edit method → `define_method` (params: `class_name`, `source`, `protocol`)
 - Rename a class    → `rename_class` (updates every reference via the refactoring engine)
-- Anything else     → `eval` with an explicit `compile:classified:` or a
-  `ShiftClassInstaller` builder.
+- Remove a class    → `remove_class`
+- Remove a method   → `remove_method`
+- Export a package  → `export_package`
+- Anything else     → first look for a dedicated MCP tool; only then use
+  `eval` with the smallest explicit expression needed.
 - **Never** use the Edit/Write tools to change image code. If you feel the urge
   to edit a `.class.st` file, stop — you are about to drift from the image.
 - After every mutation, **confirm it took**: read it back with
@@ -57,8 +66,10 @@ Never guess that a class or selector exists — look it up.
 ## Debugging: the stack traces are the payload, not noise
 - Genie returns full Smalltalk stack traces on error — they include the failing
   block's source, the receiver, and its variables. Read them closely.
-- Reproduce with a minimal `eval` before touching code. Let the trace point you
-  at the method, fix the smallest thing, re-run the test.
+- Reproduce with the narrowest dedicated MCP call available before touching
+  code. Use a minimal `eval` only when no specific tool can reproduce the
+  problem. Let the trace point you at the method, fix the smallest thing,
+  re-run the test.
 
 ## Refactoring
 - Establish a green baseline first. If there are no tests for the code you're
