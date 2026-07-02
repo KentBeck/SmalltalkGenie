@@ -80,6 +80,19 @@ GenieProtocolTest >> testOriginCheckAllowsLocalRejectsRemote [
 ]
 
 { #category : 'tests' }
+GenieProtocolTest >> testRefactoringToolsUseDedicatedHandlers [
+
+	| server specs genericHandlers |
+	server := GenieServer new.
+	specs := server variableRefactoringToolSpecs
+	         , server methodRefactoringToolSpecs.
+	genericHandlers := #( #handleVariableRefactoring:
+	                      #handleMethodRefactoring: ).
+	specs do: [ :spec |
+		self deny: (genericHandlers includes: (spec at: 'selector')) ]
+]
+
+{ #category : 'tests' }
 GenieProtocolTest >> testRenameMethodToolSchemaHasRequiredFields [
 
 	| resp renameMethodTool schema required properties |
@@ -234,6 +247,30 @@ GenieProtocolTest >> testToolsListIncludesCoreTools [
 	self assert: (names includes: 'define_class').
 	self assert: (names includes: 'rename_method').
 	self assert: (names includes: 'run_test')
+]
+
+{ #category : 'tests' }
+GenieProtocolTest >> testToolsListIncludesMethodRefactoringTools [
+
+	| resp names expected |
+	resp := GenieServer new handleMcpMessage: {
+			        ('method' -> 'tools/list').
+			        ('id' -> 43) } asDictionary.
+	names := ((resp at: 'result') at: 'tools') collect: [ :tool |
+		         tool at: 'name' ].
+	expected := #( 'extract_method' 'extract_method_and_occurrences'
+	               'extract_method_to_component'
+	               'extract_setup_method' 'extract_setup_method_and_occurrences'
+	               'inline_method' 'inline_all_senders'
+	               'move_method' 'move_method_to_class'
+	               'move_method_to_class_side'
+	               'move_method_to_instance_side'
+	               'pull_up_method' 'push_down_method' 'remove_methods_in_hierarchy'
+	               'add_parameter' 'remove_parameter' 'inline_parameter'
+	               'change_method_signature' 'deprecate_method'
+	               'replace_message_send' 'remove_all_message_sends'
+	               'create_cascade' 'split_cascade' ).
+	expected do: [ :toolName | self assert: (names includes: toolName) ]
 ]
 
 { #category : 'tests' }

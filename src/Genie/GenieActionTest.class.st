@@ -21,13 +21,38 @@ GenieActionTest >> invoke: aSelector with: aDictionary [
 	^ GenieServer new perform: aSelector with: (Wish new setArguments: aDictionary)
 ]
 
-{ #category : 'support' }
+{ #category : 'helpers' }
+GenieActionTest >> invokeMcpTool: toolName with: aDictionary [
+
+	| resp result content message |
+	resp := GenieServer new handleMcpMessage: {
+			        ('method' -> 'tools/call').
+			        ('id' -> 100).
+			        ('params' -> {
+				         ('name' -> toolName).
+				         ('arguments' -> aDictionary) } asDictionary) }
+			        asDictionary.
+	result := resp at: 'result'.
+	content := result at: 'content'.
+	message := content isEmpty
+		           ifTrue: [ '' ]
+		           ifFalse: [ content first at: 'text' ifAbsent: [ '' ] ].
+	self
+		deny: (result at: 'isError')
+		description: toolName , ' returned MCP error: ' , message.
+	^ NeoJSONReader fromString: message
+]
+
+{ #category : 'helpers' }
+GenieActionTest >> invokeMethodRefactoring: toolName with: aDictionary [
+
+	^ self invokeMcpTool: toolName with: aDictionary
+]
+
+{ #category : 'helpers' }
 GenieActionTest >> invokeVariableRefactoring: toolName with: aDictionary [
 
-	| arguments |
-	arguments := aDictionary copy.
-	arguments at: 'tool_name' put: toolName.
-	^ self invoke: #handleVariableRefactoring: with: arguments
+	^ self invokeMcpTool: toolName with: aDictionary
 ]
 
 { #category : 'running' }
@@ -41,7 +66,9 @@ GenieActionTest >> tearDown [
 
 	#( 'GenieFixtureFoo' 'GenieFixtureBar' 'GenieFixtureRenamed'
 	   'GenieVarFixture' 'GenieVarFixtureChild' 'GenieVarFixtureSibling'
-	   'GenieAccessorFixture' 'GenieTempFixture' ) do: [ :nm |
+	   'GenieAccessorFixture' 'GenieTempFixture' 'GenieMethodFixture'
+	   'GenieMethodTarget' 'GenieMethodParent' 'GenieMethodChild'
+	   'GenieMethodSibling' ) do: [ :nm |
 			(Smalltalk classNamed: nm) ifNotNil: [ :c | c removeFromSystem ].
 			Undeclared removeKey: nm asSymbol ifAbsent: [ nil ] ].
 	(GenieServer new packageOrganizer
@@ -151,6 +178,636 @@ GenieActionTest >> testListClassesActionListsPackageClasses [
 	result := self invoke: #handleListClasses: with: { 'package_name' -> 'Genie' } asDictionary.
 	self assert: (result at: 'success').
 	self assert: ((result at: 'result') anySatisfy: [ :n | n asString = 'GenieServer' ])
+]
+
+{ #category : 'tests' }
+GenieActionTest >> testMethodRefactoringToolsCreateAndSplitCascade [
+
+	| cls result source start stop semicolon interval |
+	self invoke: #handleDefineClass: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('superclass_name' -> 'Object').
+			('fields' -> '').
+			('package_name' -> 'Genie-Fixtures') } asDictionary.
+	cls := Smalltalk classNamed: 'GenieMethodFixture'.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('source'
+			 ->
+			 'makeCascade
+	| builder |
+	builder := OrderedCollection new.
+	builder add: 1.
+	builder add: 2.
+	^ builder').
+			('protocol' -> 'tests') } asDictionary.
+	source := cls sourceCodeAt: #makeCascade.
+	start := source findString: 'builder add: 1'.
+	self assert: start > 0.
+	stop := source findString: 'builder add: 2' startingAt: start.
+	self assert: stop > 0.
+	stop := stop + 'builder add: 2' size - 1.
+	result := self invokeMethodRefactoring: 'create_cascade' with: {
+			          ('class_name' -> 'GenieMethodFixture').
+			          ('method_name' -> 'makeCascade').
+			          ('start' -> start).
+			          ('stop' -> stop) } asDictionary.
+	self assert: (result at: 'success').
+	source := cls sourceCodeAt: #makeCascade.
+	self assert: (source includesSubstring: ';').
+	self assert: cls new makeCascade asArray equals: #( 1 2 ).
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('source'
+			 ->
+			 'splitCascadeSource
+	| a |
+	a := Object new initialize; asString.
+	^ a').
+			('protocol' -> 'tests') } asDictionary.
+	source := cls sourceCodeAt: #splitCascadeSource.
+	semicolon := source findString: ';'.
+	self assert: semicolon > 0.
+	interval := semicolon to: semicolon + 1.
+	result := self invokeMethodRefactoring: 'split_cascade' with: {
+			          ('class_name' -> 'GenieMethodFixture').
+			          ('method_name' -> 'splitCascadeSource').
+			          ('start' -> interval first).
+			          ('stop' -> interval last) } asDictionary.
+	self assert: (result at: 'success').
+	source := cls sourceCodeAt: #splitCascadeSource.
+	self deny: (source includesSubstring: ';').
+	self assert: (source includesSubstring: 'receiver := Object new').
+	self assert: (source includesSubstring: 'receiver initialize').
+	self assert: (source includesSubstring: 'a := receiver asString')
+]
+
+{ #category : 'tests' }
+GenieActionTest >> testMethodRefactoringToolsExtractAndInline [
+
+	| cls interval result source |
+	self invoke: #handleDefineClass: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('superclass_name' -> 'Object').
+			('fields' -> '').
+			('package_name' -> 'Genie-Fixtures') } asDictionary.
+	cls := Smalltalk classNamed: 'GenieMethodFixture'.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('source' -> 'computed
+	^ 3 + 4').
+			('protocol' -> 'tests') } asDictionary.
+	interval := self intervalFor: '3 + 4' inSourceOf: #computed in: cls.
+	result := self invokeMethodRefactoring: 'extract_method' with: {
+			          ('class_name' -> 'GenieMethodFixture').
+			          ('method_name' -> 'computed').
+			          ('new_method_name' -> 'sum').
+			          ('start' -> interval first).
+			          ('stop' -> interval last) } asDictionary.
+	self assert: (result at: 'success').
+	self assert: (cls includesSelector: #sum).
+	source := cls sourceCodeAt: #computed.
+	self assert: (source includesSubstring: 'self sum').
+	interval := self
+		            intervalFor: 'self sum'
+		            inSourceOf: #computed
+		            in: cls.
+	result := self invokeMethodRefactoring: 'inline_method' with: {
+			          ('class_name' -> 'GenieMethodFixture').
+			          ('method_name' -> 'computed').
+			          ('start' -> interval first).
+			          ('stop' -> interval last) } asDictionary.
+	self assert: (result at: 'success').
+	self assert:
+		((cls sourceCodeAt: #computed) includesSubstring: '^ 3 + 4').
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('source' -> 'answer
+	^ 42').
+			('protocol' -> 'tests') } asDictionary.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('source' -> 'useAnswer
+	^ self answer').
+			('protocol' -> 'tests') } asDictionary.
+	result := self invokeMethodRefactoring: 'inline_all_senders' with: {
+			          ('class_name' -> 'GenieMethodFixture').
+			          ('method_name' -> 'answer') } asDictionary.
+	self assert: (result at: 'success').
+	self assert:
+		((cls sourceCodeAt: #useAnswer) includesSubstring: '^ 42')
+]
+
+{ #category : 'tests' }
+GenieActionTest >> testMethodRefactoringToolsExtractMethodAndOccurrences [
+
+	| cls interval result source firstOccurrence secondOccurrence |
+	self invoke: #handleDefineClass: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('superclass_name' -> 'Object').
+			('fields' -> '').
+			('package_name' -> 'Genie-Fixtures') } asDictionary.
+	cls := Smalltalk classNamed: 'GenieMethodFixture'.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('source' -> 'repeatedExpression
+	^ (1 + 2) + (1 + 2)').
+			('protocol' -> 'tests') } asDictionary.
+	interval := self
+		            intervalFor: '1 + 2'
+		            inSourceOf: #repeatedExpression
+		            in: cls.
+	result := self
+		          invokeMethodRefactoring: 'extract_method_and_occurrences'
+		          with: {
+				          ('class_name' -> 'GenieMethodFixture').
+				          ('method_name' -> 'repeatedExpression').
+				          ('new_method_name' -> 'smallSum').
+				          ('start' -> interval first).
+				          ('stop' -> interval last) } asDictionary.
+	self assert: (result at: 'success').
+	self assert: (cls includesSelector: #smallSum).
+	source := cls sourceCodeAt: #repeatedExpression.
+	firstOccurrence := source findString: 'self smallSum'.
+	self assert: firstOccurrence > 0.
+	secondOccurrence := source
+		                    findString: 'self smallSum'
+		                    startingAt: firstOccurrence + 1.
+	self assert: secondOccurrence > 0
+]
+
+{ #category : 'tests' }
+GenieActionTest >> testMethodRefactoringToolsExtractMethodToComponent [
+
+	| fixture target interval result source |
+	self invoke: #handleDefineClass: with: {
+			('class_name' -> 'GenieMethodTarget').
+			('superclass_name' -> 'Object').
+			('fields' -> '').
+			('package_name' -> 'Genie-Fixtures') } asDictionary.
+	self invoke: #handleDefineClass: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('superclass_name' -> 'Object').
+			('fields' -> 'component').
+			('package_name' -> 'Genie-Fixtures') } asDictionary.
+	fixture := Smalltalk classNamed: 'GenieMethodFixture'.
+	target := Smalltalk classNamed: 'GenieMethodTarget'.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodTarget').
+			('source' -> 'value
+	^ 5').
+			('protocol' -> 'tests') } asDictionary.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('source' -> 'component: anObject
+	component := anObject').
+			('protocol' -> 'tests') } asDictionary.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('source' -> 'delegated
+	^ component value + 1').
+			('protocol' -> 'tests') } asDictionary.
+	interval := self
+		            intervalFor: 'component value + 1'
+		            inSourceOf: #delegated
+		            in: fixture.
+	result := self
+		          invokeMethodRefactoring: 'extract_method_to_component'
+		          with: {
+				          ('class_name' -> 'GenieMethodFixture').
+				          ('method_name' -> 'delegated').
+				          ('new_method_name' -> 'componentTotal').
+				          ('variable_name' -> 'component').
+				          ('variable_type_names' -> #( 'GenieMethodTarget' )).
+				          ('start' -> interval first).
+				          ('stop' -> interval last) } asDictionary.
+	self assert: (result at: 'success').
+	self assert: (target includesSelector: #componentTotal).
+	source := fixture sourceCodeAt: #delegated.
+	self assert: (source includesSubstring: 'component componentTotal').
+	self assert: target new componentTotal equals: 6
+]
+
+{ #category : 'tests' }
+GenieActionTest >> testMethodRefactoringToolsExtractSetupMethods [
+
+	| cls otherClass interval result source |
+	self invoke: #handleDefineClass: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('superclass_name' -> 'TestCase').
+			('fields' -> 'value').
+			('package_name' -> 'Genie-Fixtures') } asDictionary.
+	cls := Smalltalk classNamed: 'GenieMethodFixture'.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('source'
+			 ->
+			 'testUsesValue
+	value := OrderedCollection new.
+	self assert: value isEmpty').
+			('protocol' -> 'tests') } asDictionary.
+	interval := self
+		            intervalFor: 'value := OrderedCollection new'
+		            inSourceOf: #testUsesValue
+		            in: cls.
+	result := self
+		          invokeMethodRefactoring: 'extract_setup_method'
+		          with: {
+				          ('class_name' -> 'GenieMethodFixture').
+				          ('method_name' -> 'testUsesValue').
+				          ('start' -> interval first).
+				          ('stop' -> interval last) } asDictionary.
+	self assert: (result at: 'success').
+	self assert: (cls includesSelector: #setUp).
+	self assert: ((cls sourceCodeAt: #setUp) includesSubstring:
+			 'value := OrderedCollection new').
+	self deny: ((cls sourceCodeAt: #testUsesValue) includesSubstring:
+			 'value := OrderedCollection new').
+	self invoke: #handleDefineClass: with: {
+			('class_name' -> 'GenieMethodTarget').
+			('superclass_name' -> 'TestCase').
+			('fields' -> 'value').
+			('package_name' -> 'Genie-Fixtures') } asDictionary.
+	otherClass := Smalltalk classNamed: 'GenieMethodTarget'.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodTarget').
+			('source'
+			 ->
+			 'testOne
+	value := OrderedCollection new.
+	self assert: value isEmpty').
+			('protocol' -> 'tests') } asDictionary.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodTarget').
+			('source'
+			 ->
+			 'testTwo
+	value := OrderedCollection new.
+	self deny: value notEmpty').
+			('protocol' -> 'tests') } asDictionary.
+	interval := self
+		            intervalFor: 'value := OrderedCollection new'
+		            inSourceOf: #testOne
+		            in: otherClass.
+	result := self
+		          invokeMethodRefactoring:
+		          'extract_setup_method_and_occurrences'
+		          with: {
+				          ('class_name' -> 'GenieMethodTarget').
+				          ('method_name' -> 'testOne').
+				          ('start' -> interval first).
+				          ('stop' -> interval last) } asDictionary.
+	self assert: (result at: 'success').
+	self assert: (otherClass includesSelector: #setUp).
+	source := otherClass sourceCodeAt: #setUp.
+	self assert:
+		(source includesSubstring: 'value := OrderedCollection new').
+	self deny: ((otherClass sourceCodeAt: #testOne) includesSubstring:
+			 'value := OrderedCollection new').
+	self deny: ((otherClass sourceCodeAt: #testTwo) includesSubstring:
+			 'value := OrderedCollection new')
+]
+
+{ #category : 'tests' }
+GenieActionTest >> testMethodRefactoringToolsMessageRewrites [
+
+	| cls result source |
+	self invoke: #handleDefineClass: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('superclass_name' -> 'Object').
+			('fields' -> '').
+			('package_name' -> 'Genie-Fixtures') } asDictionary.
+	cls := Smalltalk classNamed: 'GenieMethodFixture'.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('source' -> 'oldName
+	^ 11').
+			('protocol' -> 'tests') } asDictionary.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('source' -> 'useOldName
+	^ self oldName').
+			('protocol' -> 'tests') } asDictionary.
+	result := self
+		          invokeMethodRefactoring: 'change_method_signature'
+		          with: {
+				          ('class_name' -> 'GenieMethodFixture').
+				          ('method_name' -> 'oldName').
+				          ('new_method_name' -> 'newName') } asDictionary.
+	self assert: (result at: 'success').
+	self assert: (cls includesSelector: #newName).
+	self assert:
+		((cls sourceCodeAt: #useOldName) includesSubstring: 'self newName').
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('source' -> 'oldThing
+	^ 1').
+			('protocol' -> 'tests') } asDictionary.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('source' -> 'newThing
+	^ 2').
+			('protocol' -> 'tests') } asDictionary.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('source' -> 'useThing
+	^ self oldThing').
+			('protocol' -> 'tests') } asDictionary.
+	result := self
+		          invokeMethodRefactoring: 'replace_message_send'
+		          with: {
+				          ('class_name' -> 'GenieMethodFixture').
+				          ('message_selector' -> 'oldThing').
+				          ('new_message_selector' -> 'newThing') } asDictionary.
+	self assert: (result at: 'success').
+	self assert:
+		((cls sourceCodeAt: #useThing) includesSubstring: 'self newThing').
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('source' -> 'ping
+	^ self').
+			('protocol' -> 'tests') } asDictionary.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('source' -> 'noisy
+	self ping.
+	self ping.
+	^ 3').
+			('protocol' -> 'tests') } asDictionary.
+	result := self
+		          invokeMethodRefactoring: 'remove_all_message_sends'
+		          with: {
+				          ('class_name' -> 'GenieMethodFixture').
+				          ('method_name' -> 'noisy').
+				          ('message_selector' -> 'ping') } asDictionary.
+	self assert: (result at: 'success').
+	source := cls sourceCodeAt: #noisy.
+	self deny: (source includesSubstring: 'self ping').
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('source' -> 'replacement
+	^ 6').
+			('protocol' -> 'tests') } asDictionary.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('source' -> 'legacy
+	^ 5').
+			('protocol' -> 'tests') } asDictionary.
+	result := self invokeMethodRefactoring: 'deprecate_method' with: {
+			          ('class_name' -> 'GenieMethodFixture').
+			          ('method_name' -> 'legacy').
+			          ('new_method_name' -> 'replacement') } asDictionary.
+	self assert: (result at: 'success').
+	source := cls sourceCodeAt: #legacy.
+	self assert: (source includesSubstring: 'deprecated:').
+	self assert: (source includesSubstring: 'replacement')
+]
+
+{ #category : 'tests' }
+GenieActionTest >> testMethodRefactoringToolsMoveAndHierarchy [
+
+	| fixture target parent child result |
+	self invoke: #handleDefineClass: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('superclass_name' -> 'Object').
+			('fields' -> '').
+			('package_name' -> 'Genie-Fixtures') } asDictionary.
+	self invoke: #handleDefineClass: with: {
+			('class_name' -> 'GenieMethodTarget').
+			('superclass_name' -> 'Object').
+			('fields' -> '').
+			('package_name' -> 'Genie-Fixtures') } asDictionary.
+	fixture := Smalltalk classNamed: 'GenieMethodFixture'.
+	target := Smalltalk classNamed: 'GenieMethodTarget'.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('source' -> 'movedValue
+	^ 7').
+			('protocol' -> 'tests') } asDictionary.
+	result := self
+		          invokeMethodRefactoring: 'move_method_to_class'
+		          with: {
+				          ('class_name' -> 'GenieMethodFixture').
+				          ('method_name' -> 'movedValue').
+				          ('target_class_name' -> 'GenieMethodTarget') }
+				          asDictionary.
+	self assert: (result at: 'success').
+	self deny: (fixture includesSelector: #movedValue).
+	self assert: (target includesSelector: #movedValue).
+	self assert: target new movedValue equals: 7.
+	self invoke: #handleDefineClass: with: {
+			('class_name' -> 'GenieMethodParent').
+			('superclass_name' -> 'Object').
+			('fields' -> '').
+			('package_name' -> 'Genie-Fixtures') } asDictionary.
+	self invoke: #handleDefineClass: with: {
+			('class_name' -> 'GenieMethodChild').
+			('superclass_name' -> 'GenieMethodParent').
+			('fields' -> '').
+			('package_name' -> 'Genie-Fixtures') } asDictionary.
+	parent := Smalltalk classNamed: 'GenieMethodParent'.
+	child := Smalltalk classNamed: 'GenieMethodChild'.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodChild').
+			('source' -> 'pulledValue
+	^ 9').
+			('protocol' -> 'tests') } asDictionary.
+	result := self invokeMethodRefactoring: 'pull_up_method' with: {
+			          ('class_name' -> 'GenieMethodChild').
+			          ('method_name' -> 'pulledValue') } asDictionary.
+	self assert: (result at: 'success').
+	self assert: (parent includesSelector: #pulledValue).
+	self deny: (child includesSelector: #pulledValue).
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodParent').
+			('source' -> 'obsolete
+	^ 1').
+			('protocol' -> 'tests') } asDictionary.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodChild').
+			('source' -> 'obsolete
+	^ 2').
+			('protocol' -> 'tests') } asDictionary.
+	result := self
+		          invokeMethodRefactoring: 'remove_methods_in_hierarchy'
+		          with: {
+				          ('class_name' -> 'GenieMethodParent').
+				          ('method_name' -> 'obsolete') } asDictionary.
+	self assert: (result at: 'success').
+	self deny: (parent includesSelector: #obsolete).
+	self deny: (child includesSelector: #obsolete)
+]
+
+{ #category : 'tests' }
+GenieActionTest >> testMethodRefactoringToolsMoveMethodsBetweenOwners [
+
+	| fixture target parent child sibling result source |
+	self invoke: #handleDefineClass: with: {
+			('class_name' -> 'GenieMethodTarget').
+			('superclass_name' -> 'Object').
+			('fields' -> '').
+			('package_name' -> 'Genie-Fixtures') } asDictionary.
+	self invoke: #handleDefineClass: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('superclass_name' -> 'Object').
+			('fields' -> 'component').
+			('package_name' -> 'Genie-Fixtures') } asDictionary.
+	fixture := Smalltalk classNamed: 'GenieMethodFixture'.
+	target := Smalltalk classNamed: 'GenieMethodTarget'.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodTarget').
+			('source' -> 'value
+	^ 5').
+			('protocol' -> 'tests') } asDictionary.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('source' -> 'component: anObject
+	component := anObject').
+			('protocol' -> 'tests') } asDictionary.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('source' -> 'componentValue
+	^ component value + 1').
+			('protocol' -> 'tests') } asDictionary.
+	result := self invokeMethodRefactoring: 'move_method' with: {
+			          ('class_name' -> 'GenieMethodFixture').
+			          ('method_name' -> 'componentValue').
+			          ('variable_name' -> 'component').
+			          ('new_method_name' -> 'componentValue').
+			          ('variable_type_names' -> #( 'GenieMethodTarget' )) }
+			          asDictionary.
+	self assert: (result at: 'success').
+	self assert: (target includesSelector: #componentValue).
+	source := fixture sourceCodeAt: #componentValue.
+	self assert: (source includesSubstring: 'component componentValue').
+	self assert: target new componentValue equals: 6.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('source' -> 'classSideValue
+	^ 12').
+			('protocol' -> 'tests') } asDictionary.
+	result := self
+		          invokeMethodRefactoring: 'move_method_to_class_side'
+		          with: {
+				          ('class_name' -> 'GenieMethodFixture').
+				          ('method_name' -> 'classSideValue') } asDictionary.
+	self assert: (result at: 'success').
+	self assert: (fixture class includesSelector: #classSideValue).
+	self assert: fixture classSideValue equals: 12.
+	fixture class compile: 'instanceSideValue
+	^ 13' classified: 'tests'.
+	result := self
+		          invokeMethodRefactoring: 'move_method_to_instance_side'
+		          with: {
+				          ('class_name' -> 'GenieMethodFixture').
+				          ('method_name' -> 'instanceSideValue') } asDictionary.
+	self assert: (result at: 'success').
+	self assert: (fixture includesSelector: #instanceSideValue).
+	self assert: fixture new instanceSideValue equals: 13.
+	self invoke: #handleDefineClass: with: {
+			('class_name' -> 'GenieMethodParent').
+			('superclass_name' -> 'Object').
+			('fields' -> '').
+			('package_name' -> 'Genie-Fixtures') } asDictionary.
+	self invoke: #handleDefineClass: with: {
+			('class_name' -> 'GenieMethodChild').
+			('superclass_name' -> 'GenieMethodParent').
+			('fields' -> '').
+			('package_name' -> 'Genie-Fixtures') } asDictionary.
+	self invoke: #handleDefineClass: with: {
+			('class_name' -> 'GenieMethodSibling').
+			('superclass_name' -> 'GenieMethodParent').
+			('fields' -> '').
+			('package_name' -> 'Genie-Fixtures') } asDictionary.
+	parent := Smalltalk classNamed: 'GenieMethodParent'.
+	child := Smalltalk classNamed: 'GenieMethodChild'.
+	sibling := Smalltalk classNamed: 'GenieMethodSibling'.
+	parent class compile: 'isAbstract
+	^ true' classified: 'testing'.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodParent').
+			('source' -> 'pushedValue
+	^ 17').
+			('protocol' -> 'tests') } asDictionary.
+	result := self invokeMethodRefactoring: 'push_down_method' with: {
+			          ('class_name' -> 'GenieMethodParent').
+			          ('method_name' -> 'pushedValue') } asDictionary.
+	self assert: (result at: 'success').
+	self assert: (child includesSelector: #pushedValue).
+	self assert: (sibling includesSelector: #pushedValue).
+	self assert: child new pushedValue equals: 17.
+	self assert: sibling new pushedValue equals: 17
+]
+
+{ #category : 'tests' }
+GenieActionTest >> testMethodRefactoringToolsParametersAndMessages [
+
+	| cls result |
+	self invoke: #handleDefineClass: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('superclass_name' -> 'Object').
+			('fields' -> '').
+			('package_name' -> 'Genie-Fixtures') } asDictionary.
+	cls := Smalltalk classNamed: 'GenieMethodFixture'.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('source' -> 'addBase
+	^ 1').
+			('protocol' -> 'tests') } asDictionary.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('source' -> 'useAddBase
+	^ self addBase').
+			('protocol' -> 'tests') } asDictionary.
+	result := self invokeMethodRefactoring: 'add_parameter' with: {
+			          ('class_name' -> 'GenieMethodFixture').
+			          ('method_name' -> 'addBase').
+			          ('new_method_name' -> 'addBase:').
+			          ('parameter_name' -> 'ignored').
+			          ('default_value' -> 'nil') } asDictionary.
+	self assert: (result at: 'success').
+	self assert: (cls includesSelector: #addBase:).
+	self assert:
+		((cls sourceCodeAt: #useAddBase) includesSubstring: 'addBase: nil').
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('source' -> 'removeBase: ignored
+	^ 2').
+			('protocol' -> 'tests') } asDictionary.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('source' -> 'useRemoveBase
+	^ self removeBase: nil').
+			('protocol' -> 'tests') } asDictionary.
+	result := self invokeMethodRefactoring: 'remove_parameter' with: {
+			          ('class_name' -> 'GenieMethodFixture').
+			          ('method_name' -> 'removeBase:').
+			          ('parameter_name' -> 'ignored').
+			          ('new_method_name' -> 'removeBase') } asDictionary.
+	self assert: (result at: 'success').
+	self assert: (cls includesSelector: #removeBase).
+	self assert: ((cls sourceCodeAt: #useRemoveBase) includesSubstring:
+			 'self removeBase').
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('source' -> 'literalValue: aNumber
+	^ aNumber + 1').
+			('protocol' -> 'tests') } asDictionary.
+	self invoke: #handleDefineMethod: with: {
+			('class_name' -> 'GenieMethodFixture').
+			('source' -> 'useLiteral
+	^ self literalValue: 4').
+			('protocol' -> 'tests') } asDictionary.
+	result := self invokeMethodRefactoring: 'inline_parameter' with: {
+			          ('class_name' -> 'GenieMethodFixture').
+			          ('method_name' -> 'literalValue:').
+			          ('parameter_name' -> 'aNumber') } asDictionary.
+	self assert: (result at: 'success').
+	self assert: (cls includesSelector: #literalValue).
+	self assert:
+		((cls sourceCodeAt: #literalValue) includesSubstring: 'aNumber := 4').
+	self assert: ((cls sourceCodeAt: #useLiteral) includesSubstring:
+			 'self literalValue')
 ]
 
 { #category : 'tests' }
@@ -337,6 +994,50 @@ GenieActionTest >> testVariableRefactoringToolsAddRenameRemoveInstanceAndClassVa
 	self assert: (result at: 'success').
 	self deny:
 		((targetClass classVarNames collect: #asString) includes: 'Bar')
+]
+
+{ #category : 'tests' }
+GenieActionTest >> testVariableRefactoringToolsClassVariableAliases [
+
+	| targetClass names result |
+	self invoke: #handleDefineClass: with: {
+			('class_name' -> 'GenieVarFixture').
+			('superclass_name' -> 'Object').
+			('fields' -> '').
+			('package_name' -> 'Genie-Fixtures') } asDictionary.
+	targetClass := Smalltalk classNamed: 'GenieVarFixture'.
+	result := self
+		          invokeVariableRefactoring: 'add_class_variable'
+		          with: {
+				          ('class_name' -> 'GenieVarFixture').
+				          ('variable_name' -> 'RemoveMe') } asDictionary.
+	self assert: (result at: 'success').
+	self assert:
+		((targetClass classVarNames collect: #asString) includes: 'RemoveMe').
+	result := self
+		          invokeVariableRefactoring: 'remove_class_variable'
+		          with: {
+				          ('class_name' -> 'GenieVarFixture').
+				          ('variable_name' -> 'RemoveMe') } asDictionary.
+	self assert: (result at: 'success').
+	self deny:
+		((targetClass classVarNames collect: #asString) includes: 'RemoveMe').
+	result := self
+		          invokeVariableRefactoring: 'add_class_variable'
+		          with: {
+				          ('class_name' -> 'GenieVarFixture').
+				          ('variable_name' -> 'SharedOld') } asDictionary.
+	self assert: (result at: 'success').
+	result := self
+		          invokeVariableRefactoring: 'rename_shared_variable'
+		          with: {
+				          ('class_name' -> 'GenieVarFixture').
+				          ('variable_name' -> 'SharedOld').
+				          ('new_variable_name' -> 'SharedNew') } asDictionary.
+	self assert: (result at: 'success').
+	names := targetClass classVarNames collect: #asString.
+	self deny: (names includes: 'SharedOld').
+	self assert: (names includes: 'SharedNew')
 ]
 
 { #category : 'tests' }
