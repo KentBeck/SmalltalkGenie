@@ -1,0 +1,152 @@
+[mcp_servers.genie]
+url = "http://localhost:8087/mcp"
+
+[mcp_servers.genie.tools.add_class_variable]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.add_instance_variable]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.apply_settings]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.define_class]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.define_method]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.eval]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.export_package]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.extract_temporary]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.generate_lazy_variable_accessor]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.generate_variable_accessor]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.generate_variable_accessors]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.get_class_comment]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.get_class_source]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.get_method_source]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.get_settings]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.import_package]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.inline_temporary]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.install_project]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.list_classes]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.list_extended_classes]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.list_methods]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.list_packages]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.merge_instance_variable]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.move_variable_definition_to_smallest_scope]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.protect_instance_variable]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.pull_up_class_variable]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.pull_up_instance_variable]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.push_down_class_variable]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.push_down_instance_variable]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.remove_class]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.remove_class_variable]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.remove_instance_variable]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.remove_method]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.remove_shared_variable]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.remove_unused_temporary]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.rename_argument_or_temporary]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.rename_class]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.rename_class_variable]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.rename_instance_variable]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.rename_method]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.rename_shared_variable]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.run_test]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.save_image]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.search_classes_like]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.search_implementors]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.search_methods_like]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.search_references]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.search_references_to_class]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.search_traits_like]
+approval_mode = "approve"
+
+[mcp_servers.genie.tools.temporary_to_instance_variable]
+approval_mode = "approve"

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "genie": {
+      "type": "http",
+      "url": "http://localhost:8087/mcp"
+    }
+  }
+}
