@@ -178,6 +178,50 @@ GenieProtocolTest >> testToolsCallRenameMethodUpdatesSenders [
 ]
 
 { #category : 'tests' }
+GenieProtocolTest >> testToolsCallVariableRefactoringDispatchesByToolName [
+
+	| cleanup server request resp result content targetClass |
+	cleanup := [
+		           #( 'GenieFixtureFoo' ) do: [ :nm |
+				           (Smalltalk classNamed: nm) ifNotNil: [ :c |
+					           c removeFromSystem ].
+				           Undeclared removeKey: nm asSymbol ifAbsent: [ nil ] ].
+		           (GenieServer new packageOrganizer
+			            packageNamed: 'Genie-Fixtures'
+			            ifAbsent: [ nil ]) ifNotNil: [ :p | p removeFromSystem ] ].
+	cleanup value.
+	[
+		(Smalltalk includesKey: #Author) ifTrue: [
+			(Smalltalk classNamed: #Author) fullName: 'Genie' ].
+		server := GenieServer new.
+		request := [ :dict | Wish new setArguments: dict asDictionary ].
+		server handleDefineClass: (request value: {
+					 ('class_name' -> 'GenieFixtureFoo').
+					 ('superclass_name' -> 'Object').
+					 ('fields' -> '').
+					 ('package_name' -> 'Genie-Fixtures') }).
+		resp := server handleMcpMessage: {
+				        ('method' -> 'tools/call').
+				        ('id' -> 6).
+				        ('params' -> {
+					         ('name' -> 'add_instance_variable').
+					         ('arguments' -> {
+						          ('class_name' -> 'GenieFixtureFoo').
+						          ('variable_name' -> 'slotValue') } asDictionary) }
+					         asDictionary) } asDictionary.
+		result := resp at: 'result'.
+		content := result at: 'content'.
+		self deny: (result at: 'isError').
+		self assert:
+			((content first at: 'text') includesSubstring:
+				 'add_instance_variable').
+		targetClass := Smalltalk classNamed: 'GenieFixtureFoo'.
+		self assert:
+			((targetClass instVarNames collect: #asString) includes:
+				 'slotValue') ] ensure: [ cleanup value ]
+]
+
+{ #category : 'tests' }
 GenieProtocolTest >> testToolsListIncludesCoreTools [
 
 	| resp names |
@@ -190,6 +234,33 @@ GenieProtocolTest >> testToolsListIncludesCoreTools [
 	self assert: (names includes: 'define_class').
 	self assert: (names includes: 'rename_method').
 	self assert: (names includes: 'run_test')
+]
+
+{ #category : 'tests' }
+GenieProtocolTest >> testToolsListIncludesVariableRefactoringTools [
+
+	| resp names expected |
+	resp := GenieServer new handleMcpMessage: {
+			        ('method' -> 'tools/list').
+			        ('id' -> 42) } asDictionary.
+	names := ((resp at: 'result') at: 'tools') collect: [ :tool |
+		         tool at: 'name' ].
+	expected := #( 'add_instance_variable' 'remove_instance_variable'
+	               'rename_instance_variable' 'pull_up_instance_variable'
+	               'push_down_instance_variable'
+	               'add_class_variable' 'remove_class_variable'
+	               'rename_class_variable' 'pull_up_class_variable'
+	               'push_down_class_variable' 'rename_shared_variable'
+	               'remove_shared_variable' 'merge_instance_variable'
+	               'protect_instance_variable'
+	               'generate_variable_accessor'
+	               'generate_variable_accessors'
+	               'generate_lazy_variable_accessor'
+	               'temporary_to_instance_variable'
+	               'extract_temporary' 'inline_temporary'
+	               'rename_argument_or_temporary'
+	               'remove_unused_temporary' 'move_variable_definition_to_smallest_scope' ).
+	expected do: [ :toolName | self assert: (names includes: toolName) ]
 ]
 
 { #category : 'tests' }

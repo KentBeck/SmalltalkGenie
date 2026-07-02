@@ -65,6 +65,12 @@ GenieServer class >> startUp: isImageStarting [
 	Smalltalk session addDeferredStartupAction: [ self current ]
 ]
 
+{ #category : 'mcp - tools' }
+GenieServer >> allMcpToolSpecs [
+
+	^ self mcpToolSpecs , self variableRefactoringToolSpecs
+]
+
 { #category : 'security' }
 GenieServer >> allowDangerousTools [
 	^ self settings at: #allowDangerousTools ifAbsent: [ true ]
@@ -96,6 +102,22 @@ GenieServer >> bindingInterface [
 	^ self settings at: #bindingInterface ifAbsent: [ '127.0.0.1' ]
 ]
 
+{ #category : 'private' }
+GenieServer >> classFromRefactoringRequest: request [
+
+	| className targetClass |
+	className := request at: #class_name.
+	targetClass := Smalltalk classNamed: className.
+	targetClass ifNil: [ self error: 'Unknown class: ' , className ].
+	^ targetClass
+]
+
+{ #category : 'private' }
+GenieServer >> classVariableFromRefactoringRequest: request [
+
+	^ (request at: #class_variable ifAbsent: [ false ]) == true
+]
+
 { #category : 'factory' }
 GenieServer >> createTeapot [
 	^ (Teapot configure: self teapotConfig associations)
@@ -106,6 +128,36 @@ GenieServer >> createTeapot [
 { #category : 'security' }
 GenieServer >> dangerousToolNames [
 	^ #('eval' 'save_image' 'remove_class' 'remove_method')
+]
+
+{ #category : 'private' }
+GenieServer >> executeGenerateVariableAccessorsFor: request class: targetClass tool: toolName [
+
+	| classVariable variableNames |
+	classVariable := self classVariableFromRefactoringRequest: request.
+	variableNames := request at: #variable_names ifAbsent: [
+			                 classVariable
+				                 ifTrue: [ targetClass classVarNames ]
+				                 ifFalse: [ targetClass instVarNames ] ].
+	variableNames do: [ :each |
+			(ReCreateAccessorsForVariableTransformation
+				 variable: each
+				 class: targetClass
+				 classVariable: classVariable) execute ].
+	^ self
+		  variableRefactoringResultForTool: toolName
+		  request: request
+		  variables: variableNames
+]
+
+{ #category : 'private' }
+GenieServer >> executeVariableRefactoring: refactoring tool: toolName request: request variables: variableNames [
+
+	refactoring execute.
+	^ self
+		  variableRefactoringResultForTool: toolName
+		  request: request
+		  variables: variableNames
 ]
 
 { #category : 'private' }
@@ -507,6 +559,161 @@ GenieServer >> handleSearchTraitsLike: request [
 			collect: [ :each | each name ] ]
 ]
 
+{ #category : 'tools' }
+GenieServer >> handleVariableRefactoring: request [
+
+	^ self returnResultDo: [
+			  | toolName targetClass variableName newName targetName classVariable refactoring selector interval result pullUpTarget |
+			  toolName := request at: #tool_name.
+			  targetClass := self classFromRefactoringRequest: request.
+			  variableName := request at: #variable_name ifAbsent: [ nil ].
+			  newName := request at: #new_variable_name ifAbsent: [ nil ].
+			  targetName := request at: #target_variable_name ifAbsent: [ nil ].
+			  classVariable := self classVariableFromRefactoringRequest:
+				                   request.
+			  result := nil.
+			  toolName = 'generate_variable_accessors' ifTrue: [
+					  result := self
+						            executeGenerateVariableAccessorsFor: request
+						            class: targetClass
+						            tool: toolName ].
+			  result ifNil: [
+					  toolName = 'add_instance_variable' ifTrue: [
+							  refactoring := RBAddInstanceVariableRefactoring
+								                 variable: variableName
+								                 class: targetClass ].
+					  toolName = 'remove_instance_variable' ifTrue: [
+							  refactoring := ReRemoveInstanceVariableRefactoring
+								                 remove: variableName
+								                 from: targetClass ].
+					  toolName = 'rename_instance_variable' ifTrue: [
+							  refactoring := RBRenameInstanceVariableRefactoring
+								                 rename: variableName
+								                 to: newName
+								                 in: targetClass
+								                 renameAccessors:
+								                 (request
+									                  at: #rename_accessors
+									                  ifAbsent: [ false ]) == true ].
+					  toolName = 'pull_up_instance_variable' ifTrue: [
+							  pullUpTarget := self
+								                  pullUpTargetFor: targetClass
+								                  variable: variableName
+								                  classVariable: false.
+							  refactoring := RePullUpInstanceVariableRefactoring
+								                 variable: variableName
+								                 class: pullUpTarget ].
+					  toolName = 'push_down_instance_variable' ifTrue: [
+							  refactoring := RBPushDownInstanceVariableRefactoring
+								                 variable: variableName
+								                 class: targetClass ].
+					  toolName = 'add_class_variable' ifTrue: [
+							  refactoring := RBAddClassVariableRefactoring
+								                 variable: variableName
+								                 class: targetClass ].
+					  toolName = 'remove_class_variable' ifTrue: [
+							  refactoring := ReRemoveSharedVariableRefactoring
+								                 remove: variableName
+								                 from: targetClass ].
+					  toolName = 'rename_class_variable' ifTrue: [
+							  refactoring := RBRenameVariableTransformation
+								                 rename: variableName
+								                 to: newName
+								                 in: targetClass
+								                 classVariable: true ].
+					  toolName = 'pull_up_class_variable' ifTrue: [
+							  pullUpTarget := self
+								                  pullUpTargetFor: targetClass
+								                  variable: variableName
+								                  classVariable: true.
+							  refactoring := RBPullUpClassVariableRefactoring
+								                 variable: variableName
+								                 class: pullUpTarget ].
+					  toolName = 'push_down_class_variable' ifTrue: [
+							  refactoring := RBPushDownClassVariableRefactoring
+								                 variable: variableName
+								                 class: targetClass ].
+					  toolName = 'rename_shared_variable' ifTrue: [
+							  refactoring := ReRenameSharedVariableRefactoring
+								                 rename: variableName
+								                 to: newName
+								                 in: targetClass ].
+					  toolName = 'remove_shared_variable' ifTrue: [
+							  refactoring := ReRemoveSharedVariableRefactoring
+								                 remove: variableName
+								                 from: targetClass ].
+					  toolName = 'merge_instance_variable' ifTrue: [
+							  refactoring := RBMergeInstanceVariableIntoAnother
+								                 rename: variableName
+								                 to: targetName
+								                 in: targetClass ].
+					  toolName = 'protect_instance_variable' ifTrue: [
+							  refactoring := RBProtectInstanceVariableRefactoring
+								                 variable: variableName
+								                 class: targetClass ].
+					  toolName = 'generate_variable_accessor' ifTrue: [
+							  refactoring := ReCreateAccessorsForVariableTransformation
+								                 variable: variableName
+								                 class: targetClass
+								                 classVariable: classVariable ].
+					  toolName = 'generate_lazy_variable_accessor' ifTrue: [
+							  refactoring := RBCreateLazyAccessorsForVariableTransformation
+								                 variable: variableName
+								                 class: targetClass
+								                 classVariable: classVariable
+								                 defaultValue: (request at: #default_value) ].
+					  toolName = 'temporary_to_instance_variable' ifTrue: [
+							  selector := (request at: #method_name) asSymbol.
+							  refactoring := RBTemporaryToInstanceVariableTransformation
+								                 class: targetClass
+								                 selector: selector
+								                 variable: variableName ].
+					  toolName = 'extract_temporary' ifTrue: [
+							  selector := (request at: #method_name) asSymbol.
+							  interval := self intervalFromRefactoringRequest: request.
+							  refactoring := RBExtractToTemporaryRefactoring
+								                 extract: interval
+								                 to: variableName
+								                 from: selector
+								                 in: targetClass ].
+					  toolName = 'inline_temporary' ifTrue: [
+							  selector := (request at: #method_name) asSymbol.
+							  interval := self intervalFromRefactoringRequest: request.
+							  refactoring := RBInlineTemporaryRefactoring
+								                 inline: interval
+								                 from: selector
+								                 in: targetClass ].
+					  toolName = 'rename_argument_or_temporary' ifTrue: [
+							  selector := (request at: #method_name) asSymbol.
+							  interval := self intervalFromRefactoringRequest: request.
+							  refactoring := RBRenameArgumentOrTemporaryRefactoring
+								                 renameTemporaryFrom: interval
+								                 to: newName
+								                 in: targetClass
+								                 selector: selector ].
+					  toolName = 'remove_unused_temporary' ifTrue: [
+							  selector := (request at: #method_name) asSymbol.
+							  refactoring := ReRemoveUnusedTemporaryVariableRefactoring new
+								                 inMethod: selector inClass: targetClass name;
+								                 yourself ].
+					  toolName = 'move_variable_definition_to_smallest_scope'
+						  ifTrue: [
+								  selector := (request at: #method_name) asSymbol.
+								  interval := self intervalFromRefactoringRequest: request.
+								  refactoring := RBMoveVariableDefinitionToSmallestValidScopeRefactoring
+									                 bindTight: interval
+									                 in: targetClass
+									                 selector: selector ].
+					  refactoring ifNil: [
+						  self error: 'Unknown variable refactoring tool: ' , toolName ].
+					  result := self
+						            executeVariableRefactoring: refactoring
+						            tool: toolName
+						            request: request
+						            variables: nil ].
+			  result ]
+]
+
 { #category : 'security' }
 GenieServer >> headersAuthorized: aHeaders [
 	"Opt-in bearer-token auth. With no authToken set every request is allowed;
@@ -516,6 +723,12 @@ GenieServer >> headersAuthorized: aHeaders [
 	(token isNil or: [ token isEmpty ]) ifTrue: [ ^ true ].
 	provided := (aHeaders includesKey: 'Authorization') ifTrue: [ aHeaders at: 'Authorization' ] ifFalse: [ '' ].
 	^ provided = ('Bearer ' , token)
+]
+
+{ #category : 'private' }
+GenieServer >> intervalFromRefactoringRequest: request [
+
+	^ (request at: #start) asInteger to: (request at: #stop) asInteger
 ]
 
 { #category : 'mcp - protocol' }
@@ -761,27 +974,62 @@ GenieServer >> mcpToolSpecs [
 
 { #category : 'mcp - protocol' }
 GenieServer >> mcpToolsCall: params id: anId [
+
 	| toolName arguments spec result text |
 	toolName := params at: 'name'.
-	(self allowDangerousTools not and: [ self dangerousToolNames includes: toolName ])
-		ifTrue: [ ^ self jsonRpcError: -32600 message: 'Tool disabled: ' , toolName , ' (allowDangerousTools is off)' id: anId ].
+	(self allowDangerousTools not and: [
+		 self dangerousToolNames includes: toolName ]) ifTrue: [
+			^ self
+				  jsonRpcError: -32600
+				  message:
+				  'Tool disabled: ' , toolName , ' (allowDangerousTools is off)'
+				  id: anId ].
 	arguments := params at: 'arguments' ifAbsent: [ Dictionary new ].
-	spec := self mcpToolSpecs detect: [ :s | (s at: 'name') = toolName ] ifNone: [ nil ].
-	spec ifNil: [ ^ self jsonRpcError: -32602 message: 'Unknown tool: ' , toolName id: anId ].
-	result := self perform: (spec at: 'selector') with: (Wish new setArguments: arguments).
-	text := String streamContents: [ :s | (NeoJSONWriter on: s) nextPut: result ].
-	^ self jsonRpc: { 'content' -> { { 'type' -> 'text'. 'text' -> text } asDictionary }.
-		'isError' -> (result at: 'success') not } asDictionary id: anId
+	arguments at: 'tool_name' put: toolName.
+	spec := self allMcpToolSpecs
+		        detect: [ :s | (s at: 'name') = toolName ]
+		        ifNone: [ nil ].
+	spec ifNil: [
+			^ self
+				  jsonRpcError: -32602
+				  message: 'Unknown tool: ' , toolName
+				  id: anId ].
+	result := self
+		          perform: (spec at: 'selector')
+		          with: (Wish new setArguments: arguments).
+	text := String streamContents: [ :s |
+		        (NeoJSONWriter on: s) nextPut: result ].
+	^ self
+		  jsonRpc: {
+				  ('content' -> { {
+					   ('type' -> 'text').
+					   ('text' -> text) } asDictionary }).
+				  ('isError' -> (result at: 'success') not) } asDictionary
+		  id: anId
 ]
 
 { #category : 'mcp - protocol' }
 GenieServer >> mcpToolsList: anId [
+
 	| tools |
-	tools := self mcpToolSpecs collect: [ :spec |
-		{ 'name' -> (spec at: 'name').
-		  'description' -> (spec at: 'description').
-		  'inputSchema' -> (spec at: 'inputSchema') } asDictionary ].
-	^ self jsonRpc: { 'tools' -> tools asArray } asDictionary id: anId
+	tools := self allMcpToolSpecs collect: [ :spec |
+			         {
+				         ('name' -> (spec at: 'name')).
+				         ('description' -> (spec at: 'description')).
+				         ('inputSchema' -> (spec at: 'inputSchema')) }
+				         asDictionary ].
+	^ self jsonRpc: { ('tools' -> tools asArray) } asDictionary id: anId
+]
+
+{ #category : 'mcp - tools' }
+GenieServer >> mcpVariableRefactoringTool: aName description: aDescription required: requiredNames [
+
+	^ self
+		  mcpTool: aName
+		  description: aDescription
+		  selector: #handleVariableRefactoring:
+		  properties: self variableRefactoringToolProperties
+		  required: requiredNames
 ]
 
 { #category : 'security' }
@@ -799,6 +1047,26 @@ GenieServer >> packageOrganizer [
 	^ (Smalltalk includesKey: #PackageOrganizer)
 		ifTrue: [ (Smalltalk classNamed: #PackageOrganizer) default ]
 		ifFalse: [ (Smalltalk classNamed: #RPackageOrganizer) default ]
+]
+
+{ #category : 'private - refactoring' }
+GenieServer >> pullUpTargetFor: aClass variable: variableName classVariable: classVariable [
+
+	| directlyDefinesVariable targetClass |
+	directlyDefinesVariable := classVariable
+		                           ifTrue: [
+				                           aClass classVarNames anySatisfy: [
+					                           :each | each asString = variableName ] ]
+		                           ifFalse: [
+				                           aClass instVarNames anySatisfy: [ :each |
+					                           each asString = variableName ] ].
+	directlyDefinesVariable ifFalse: [ ^ aClass ].
+	targetClass := aClass superclass.
+	targetClass ifNil: [
+			self error:
+				'Cannot pull up ' , variableName , ' from ' , aClass name
+				, ': no superclass' ].
+	^ targetClass
 ]
 
 { #category : 'private' }
@@ -934,4 +1202,155 @@ GenieServer >> testSuiteForClass: className package: packageName [
 	^ className
 		ifNotNil: [ (Smalltalk globals at: className asSymbol) suite ]
 		ifNil: [ (self packageOrganizer packageNamed: packageName) testSuite ]
+]
+
+{ #category : 'private' }
+GenieServer >> variableRefactoringResultForTool: toolName request: request variables: variableNames [
+
+	| result |
+	result := Dictionary new.
+	result at: 'tool' put: toolName.
+	#( 'class_name' 'method_name' 'variable_name' 'new_variable_name'
+	   'target_variable_name' ) do: [ :key |
+			| value |
+			value := request at: key ifAbsent: [ nil ].
+			value ifNotNil: [ result at: key put: value ] ].
+	variableNames ifNotNil: [
+		result at: 'variable_names' put: variableNames asArray ].
+	^ result
+]
+
+{ #category : 'mcp - tools' }
+GenieServer >> variableRefactoringToolProperties [
+
+	^ {
+		  ('class_name' -> 'string').
+		  ('variable_name' -> 'string').
+		  ('new_variable_name' -> 'string').
+		  ('target_variable_name' -> 'string').
+		  ('method_name' -> 'string').
+		  ('start' -> 'integer').
+		  ('stop' -> 'integer').
+		  ('class_variable' -> 'boolean').
+		  ('rename_accessors' -> 'boolean').
+		  ('default_value' -> 'string').
+		  ('variable_names' -> 'array') }
+]
+
+{ #category : 'mcp - tools' }
+GenieServer >> variableRefactoringToolSpecs [
+
+	^ {
+		  (self
+			   mcpVariableRefactoringTool: 'add_instance_variable'
+			   description: 'Add an instance variable to a class.'
+			   required: #( 'class_name' 'variable_name' )).
+		  (self
+			   mcpVariableRefactoringTool: 'remove_instance_variable'
+			   description: 'Remove an instance variable from a class.'
+			   required: #( 'class_name' 'variable_name' )).
+		  (self
+			   mcpVariableRefactoringTool: 'rename_instance_variable'
+			   description:
+			   'Rename an instance variable and update references.'
+			   required: #( 'class_name' 'variable_name' 'new_variable_name' )).
+		  (self
+			   mcpVariableRefactoringTool: 'pull_up_instance_variable'
+			   description:
+			   'Pull an instance variable from a subclass to its superclass.'
+			   required: #( 'class_name' 'variable_name' )).
+		  (self
+			   mcpVariableRefactoringTool: 'push_down_instance_variable'
+			   description:
+			   'Push an instance variable from a superclass to subclasses.'
+			   required: #( 'class_name' 'variable_name' )).
+		  (self
+			   mcpVariableRefactoringTool: 'add_class_variable'
+			   description: 'Add a class variable to a class.'
+			   required: #( 'class_name' 'variable_name' )).
+		  (self
+			   mcpVariableRefactoringTool: 'remove_class_variable'
+			   description: 'Remove a class variable from a class.'
+			   required: #( 'class_name' 'variable_name' )).
+		  (self
+			   mcpVariableRefactoringTool: 'rename_class_variable'
+			   description: 'Rename a class variable and update references.'
+			   required: #( 'class_name' 'variable_name' 'new_variable_name' )).
+		  (self
+			   mcpVariableRefactoringTool: 'pull_up_class_variable'
+			   description:
+			   'Pull a class variable from a subclass to its superclass.'
+			   required: #( 'class_name' 'variable_name' )).
+		  (self
+			   mcpVariableRefactoringTool: 'push_down_class_variable'
+			   description:
+			   'Push a class variable from a superclass to subclasses.'
+			   required: #( 'class_name' 'variable_name' )).
+		  (self
+			   mcpVariableRefactoringTool: 'rename_shared_variable'
+			   description: 'Rename a shared variable and update references.'
+			   required: #( 'class_name' 'variable_name' 'new_variable_name' )).
+		  (self
+			   mcpVariableRefactoringTool: 'remove_shared_variable'
+			   description: 'Remove a shared variable from a class.'
+			   required: #( 'class_name' 'variable_name' )).
+		  (self
+			   mcpVariableRefactoringTool: 'merge_instance_variable'
+			   description:
+			   'Merge one instance variable into another instance variable.'
+			   required:
+			   #( 'class_name' 'variable_name' 'target_variable_name' )).
+		  (self
+			   mcpVariableRefactoringTool: 'protect_instance_variable'
+			   description:
+			   'Protect an instance variable by inlining direct accessor references.'
+			   required: #( 'class_name' 'variable_name' )).
+		  (self
+			   mcpVariableRefactoringTool: 'generate_variable_accessor'
+			   description:
+			   'Generate accessor methods for one instance or class variable.'
+			   required: #( 'class_name' 'variable_name' )).
+		  (self
+			   mcpVariableRefactoringTool: 'generate_variable_accessors'
+			   description:
+			   'Generate accessor methods for all or selected instance/class variables.'
+			   required: #( 'class_name' )).
+		  (self
+			   mcpVariableRefactoringTool: 'generate_lazy_variable_accessor'
+			   description:
+			   'Generate a lazy-initializing accessor for one instance or class variable.'
+			   required: #( 'class_name' 'variable_name' 'default_value' )).
+		  (self
+			   mcpVariableRefactoringTool: 'temporary_to_instance_variable'
+			   description:
+			   'Convert a temporary variable in a method to an instance variable.'
+			   required: #( 'class_name' 'method_name' 'variable_name' )).
+		  (self
+			   mcpVariableRefactoringTool: 'extract_temporary'
+			   description:
+			   'Extract a selected expression to a temporary variable. Uses 1-based start/stop source indexes.'
+			   required:
+			   #( 'class_name' 'method_name' 'variable_name' 'start' 'stop' )).
+		  (self
+			   mcpVariableRefactoringTool: 'inline_temporary'
+			   description:
+			   'Inline a selected temporary variable. Uses 1-based start/stop source indexes.'
+			   required: #( 'class_name' 'method_name' 'start' 'stop' )).
+		  (self
+			   mcpVariableRefactoringTool: 'rename_argument_or_temporary'
+			   description:
+			   'Rename an argument or temporary selected by 1-based start/stop source indexes.'
+			   required:
+			   #( 'class_name' 'method_name' 'new_variable_name'
+			      'start' 'stop' )).
+		  (self
+			   mcpVariableRefactoringTool: 'remove_unused_temporary'
+			   description: 'Remove unused temporary variables from a method.'
+			   required: #( 'class_name' 'method_name' )).
+		  (self
+			   mcpVariableRefactoringTool:
+			   'move_variable_definition_to_smallest_scope'
+			   description:
+			   'Move a selected variable definition to its smallest valid scope. Uses 1-based start/stop source indexes.'
+			   required: #( 'class_name' 'method_name' 'start' 'stop' )) }
 ]
