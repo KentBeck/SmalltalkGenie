@@ -52,9 +52,10 @@ GenieServer class >> initialize [
 
 { #category : 'resetting' }
 GenieServer class >> restart [
+
 	self current stop.
 	self current: nil.
-	self current start
+	^ self current
 ]
 
 { #category : 'system startup' }

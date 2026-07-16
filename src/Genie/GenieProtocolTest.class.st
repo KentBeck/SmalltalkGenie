@@ -150,6 +150,23 @@ GenieProtocolTest >> testRenameMethodToolSchemaHasRequiredFields [
 		equals: 'array'
 ]
 
+{ #category : 'tests - lifecycle' }
+GenieProtocolTest >> testRestartStartsReplacementServerOnce [
+
+	| serverClass original replacement |
+	serverClass := GenieServerLifecycleTestDouble.
+	serverClass current: nil.
+	[
+		original := serverClass current.
+		self assert: original startCount equals: 1.
+		serverClass restart.
+		replacement := serverClass current.
+		self deny: replacement identicalTo: original.
+		self assert: original stopCount equals: 1.
+		self assert: replacement startCount equals: 1 ] ensure: [
+		serverClass current: nil ]
+]
+
 { #category : 'tests - security' }
 GenieProtocolTest >> testToolErrorsExposeDebugDetailsOnlyWhenExplicitlyEnabled [
 
