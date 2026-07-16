@@ -716,35 +716,80 @@ GenieServer >> handleListPackages: request [
 
 { #category : 'handling' }
 GenieServer >> handleMcpHttp: request [
-	| message response json resp negotiatedVersion |
-	(self originAllowed: request headers)
-		ifFalse: [ ^ ZnResponse new statusLine: (ZnStatusLine code: 403); yourself ].
-	(self headersAuthorized: request headers)
-		ifFalse: [ ^ ZnResponse new statusLine: (ZnStatusLine code: 401); yourself ].
-	message := NeoJSONReader fromString: request entity contents.
-	negotiatedVersion := (request headers includesKey: 'MCP-Protocol-Version')
-		ifTrue: [ request headers at: 'MCP-Protocol-Version' ]
-		ifFalse: [ (message at: 'params' ifAbsent: [ Dictionary new ]) at: 'protocolVersion' ifAbsent: [ '2025-11-25' ] ].
+
+	| message response negotiatedVersion initializationParams |
+	(self originAllowed: request headers) ifFalse: [
+			^ ZnResponse new
+				  statusLine: (ZnStatusLine code: 403);
+				  yourself ].
+	(self headersAuthorized: request headers) ifFalse: [
+			^ ZnResponse new
+				  statusLine: (ZnStatusLine code: 401);
+				  yourself ].
+	negotiatedVersion := (request headers includesKey:
+		                      'MCP-Protocol-Version')
+		                     ifTrue: [
+		                     request headers at: 'MCP-Protocol-Version' ]
+		                     ifFalse: [ '2025-11-25' ].
+	[ message := NeoJSONReader fromString: request entity contents ]
+		on: Error
+		do: [
+				^ self
+					  mcpHttpResponseFor:
+					  (self jsonRpcError: -32700 message: 'Parse error' id: nil)
+					  protocolVersion: negotiatedVersion ].
+	((message isKindOf: Dictionary) and: [
+		 (message includesKey: 'jsonrpc') not ]) ifTrue: [
+			^ self
+				  mcpHttpResponseFor: (self
+						   jsonRpcError: -32600
+						   message: 'Invalid Request'
+						   id: (message at: 'id' ifAbsent: [ nil ]))
+				  protocolVersion: negotiatedVersion ].
+	((request headers includesKey: 'MCP-Protocol-Version') not and: [
+		 message isKindOf: Dictionary ]) ifTrue: [
+			initializationParams := message
+				                        at: 'params'
+				                        ifAbsent: [ Dictionary new ].
+			(initializationParams isKindOf: Dictionary) ifTrue: [
+					negotiatedVersion := initializationParams
+						                     at: 'protocolVersion'
+						                     ifAbsent: [ negotiatedVersion ] ] ].
 	response := self handleMcpMessage: message.
-	response ifNil: [ ^ ZnResponse new statusLine: (ZnStatusLine code: 202); yourself ].
-	json := String streamContents: [ :s | (NeoJSONWriter on: s) nextPut: response ].
-	resp := ZnResponse ok: (ZnEntity with: json type: ZnMimeType applicationJson).
-	resp headers at: 'MCP-Protocol-Version' put: negotiatedVersion.
-	^ resp
+	response ifNil: [
+			^ ZnResponse new
+				  statusLine: (ZnStatusLine code: 202);
+				  yourself ].
+	^ self
+		  mcpHttpResponseFor: response
+		  protocolVersion: negotiatedVersion
 ]
 
 { #category : 'mcp - protocol' }
 GenieServer >> handleMcpMessage: aMessage [
-	| method id params |
-	method := aMessage at: 'method' ifAbsent: [ nil ].
+
+	| method id params jsonRpcVersion |
+	(aMessage isKindOf: Dictionary) ifFalse: [
+		^ self jsonRpcError: -32600 message: 'Invalid Request' id: nil ].
 	id := aMessage at: 'id' ifAbsent: [ nil ].
+	jsonRpcVersion := aMessage at: 'jsonrpc' ifAbsent: [ nil ].
+	(jsonRpcVersion notNil and: [ jsonRpcVersion ~= '2.0' ]) ifTrue: [
+		^ self jsonRpcError: -32600 message: 'Invalid Request' id: id ].
+	method := aMessage at: 'method' ifAbsent: [ nil ].
+	method isString ifFalse: [
+		^ self jsonRpcError: -32600 message: 'Invalid Request' id: id ].
 	params := aMessage at: 'params' ifAbsent: [ Dictionary new ].
+	(params isKindOf: Dictionary) ifFalse: [
+		^ self jsonRpcError: -32600 message: 'Invalid Request' id: id ].
 	method = 'initialize' ifTrue: [ ^ self mcpInitialize: params id: id ].
 	method = 'tools/list' ifTrue: [ ^ self mcpToolsList: id ].
 	method = 'tools/call' ifTrue: [ ^ self mcpToolsCall: params id: id ].
 	method = 'ping' ifTrue: [ ^ self jsonRpc: Dictionary new id: id ].
-	(method notNil and: [ method beginsWith: 'notifications/' ]) ifTrue: [ ^ nil ].
-	^ self jsonRpcError: -32601 message: 'Method not found: ' , method asString id: id
+	(method beginsWith: 'notifications/') ifTrue: [ ^ nil ].
+	^ self
+		  jsonRpcError: -32601
+		  message: 'Method not found: ' , method
+		  id: id
 ]
 
 { #category : 'variable refactoring' }
@@ -1395,6 +1440,33 @@ GenieServer >> jsonRpcError: aCode message: aMessage id: anId [
 	    'error' -> { 'code' -> aCode. 'message' -> aMessage } asDictionary } asDictionary
 ]
 
+{ #category : 'mcp tools' }
+GenieServer >> jsonSchemaForProperty: propertyName type: typeName [
+
+	| schema itemType |
+	schema := { ('type' -> typeName) } asDictionary.
+	typeName = 'array' ifTrue: [
+			itemType := propertyName = 'permutation'
+				            ifTrue: [ 'integer' ]
+				            ifFalse: [ 'string' ].
+			schema at: 'items' put: { ('type' -> itemType) } asDictionary ].
+	^ schema
+]
+
+{ #category : 'mcp - protocol' }
+GenieServer >> mcpHttpResponseFor: response protocolVersion: protocolVersion [
+
+	| json httpResponse |
+	json := String streamContents: [ :stream |
+		        (NeoJSONWriter on: stream) nextPut: response ].
+	httpResponse := ZnResponse ok:
+		                (ZnEntity
+			                 with: json
+			                 type: ZnMimeType applicationJson).
+	httpResponse headers at: 'MCP-Protocol-Version' put: protocolVersion.
+	^ httpResponse
+]
+
 { #category : 'mcp - protocol' }
 GenieServer >> mcpInitialize: params id: anId [
 	| version |
@@ -1416,15 +1488,24 @@ GenieServer >> mcpMethodRefactoringTool: aName description: aDescription selecto
 		  required: requiredNames
 ]
 
-{ #category : 'mcp - tools' }
+{ #category : 'mcp tools' }
 GenieServer >> mcpTool: aName description: aDesc selector: aSelector properties: propAssocs required: requiredNames [
+
 	| props |
 	props := Dictionary new.
-	propAssocs do: [ :assoc | props at: assoc key put: { 'type' -> assoc value } asDictionary ].
-	^ { 'name' -> aName.
-	    'description' -> aDesc.
-	    'selector' -> aSelector.
-	    'inputSchema' -> { 'type' -> 'object'. 'properties' -> props. 'required' -> requiredNames } asDictionary } asDictionary
+	propAssocs do: [ :assoc |
+			props
+				at: assoc key
+				put: (self jsonSchemaForProperty: assoc key type: assoc value) ].
+	^ {
+		  ('name' -> aName).
+		  ('description' -> aDesc).
+		  ('selector' -> aSelector).
+		  ('inputSchema' -> {
+			   ('type' -> 'object').
+			   ('properties' -> props).
+			   ('required' -> requiredNames).
+			   ('additionalProperties' -> false) } asDictionary) } asDictionary
 ]
 
 { #category : 'mcp - tools' }
@@ -1639,8 +1720,23 @@ GenieServer >> mcpToolSpecs [
 { #category : 'mcp - protocol' }
 GenieServer >> mcpToolsCall: params id: anId [
 
-	| toolName arguments spec result text |
-	toolName := params at: 'name'.
+	| toolName arguments spec validationError result text |
+	(params isKindOf: Dictionary) ifFalse: [
+		^ self jsonRpcError: -32602 message: 'Invalid params' id: anId ].
+	toolName := params at: 'name' ifAbsent: [ nil ].
+	toolName isString ifFalse: [
+			^ self
+				  jsonRpcError: -32602
+				  message: 'Invalid params: tool name must be a string'
+				  id: anId ].
+	spec := self allMcpToolSpecs
+		        detect: [ :each | (each at: 'name') = toolName ]
+		        ifNone: [ nil ].
+	spec ifNil: [
+			^ self
+				  jsonRpcError: -32602
+				  message: 'Unknown tool: ' , toolName
+				  id: anId ].
 	(self allowDangerousTools not and: [
 		 self dangerousToolNames includes: toolName ]) ifTrue: [
 			^ self
@@ -1649,20 +1745,21 @@ GenieServer >> mcpToolsCall: params id: anId [
 				  'Tool disabled: ' , toolName , ' (allowDangerousTools is off)'
 				  id: anId ].
 	arguments := params at: 'arguments' ifAbsent: [ Dictionary new ].
-	arguments at: 'tool_name' put: toolName.
-	spec := self allMcpToolSpecs
-		        detect: [ :s | (s at: 'name') = toolName ]
-		        ifNone: [ nil ].
-	spec ifNil: [
+	validationError := self
+		                   toolArgumentValidationErrorFor: arguments
+		                   spec: spec.
+	validationError ifNotNil: [
 			^ self
 				  jsonRpcError: -32602
-				  message: 'Unknown tool: ' , toolName
+				  message: 'Invalid tool arguments: ' , validationError
 				  id: anId ].
+	arguments := arguments copy.
+	arguments at: 'tool_name' put: toolName.
 	result := self
 		          perform: (spec at: 'selector')
 		          with: (Wish new setArguments: arguments).
-	text := String streamContents: [ :s |
-		        (NeoJSONWriter on: s) nextPut: result ].
+	text := String streamContents: [ :stream |
+		        (NeoJSONWriter on: stream) nextPut: result ].
 	^ self
 		  jsonRpc: {
 				  ('content' -> { {
@@ -1780,6 +1877,7 @@ GenieServer >> methodRefactoringToolSpecs [
 					   ('new_method_name' -> 'string').
 					   ('argument_names' -> 'array').
 					   ('variable_name' -> 'string').
+					   ('variable_type_names' -> 'array').
 					   ('start' -> 'integer').
 					   ('stop' -> 'integer') }
 			   required:
@@ -2280,6 +2378,64 @@ GenieServer >> testSuiteForClass: className package: packageName [
 	^ className
 		ifNotNil: [ (Smalltalk globals at: className asSymbol) suite ]
 		ifNil: [ (self packageOrganizer packageNamed: packageName) testSuite ]
+]
+
+{ #category : 'mcp - tools' }
+GenieServer >> toolArgumentValidationErrorFor: arguments spec: spec [
+
+	| schema properties required unknownKey missingKey invalidKey propertySchema |
+	(arguments isKindOf: Dictionary) ifFalse: [
+		^ 'arguments must be an object' ].
+	schema := spec at: 'inputSchema'.
+	properties := schema at: 'properties'.
+	required := schema at: 'required'.
+	missingKey := required
+		              detect: [ :key | (arguments includesKey: key) not ]
+		              ifNone: [ nil ].
+	missingKey ifNotNil: [ ^ 'missing required argument: ' , missingKey ].
+	unknownKey := arguments keys
+		              detect: [ :key | (properties includesKey: key) not ]
+		              ifNone: [ nil ].
+	unknownKey ifNotNil: [ ^ 'unknown argument: ' , unknownKey asString ].
+	invalidKey := arguments keys
+		              detect: [ :key |
+				              propertySchema := properties at: key.
+				              (self
+					               value: (arguments at: key)
+					               matchesJsonSchema: propertySchema) not ]
+		              ifNone: [ nil ].
+	invalidKey ifNotNil: [
+			propertySchema := properties at: invalidKey.
+			^ invalidKey asString , ' does not match its schema ('
+			  , (propertySchema at: 'type') , ')' ].
+	^ nil
+]
+
+{ #category : 'mcp - tools' }
+GenieServer >> value: value matchesJsonSchema: schema [
+
+	| typeName itemSchema |
+	typeName := schema at: 'type'.
+	(self value: value matchesJsonSchemaType: typeName) ifFalse: [
+		^ false ].
+	typeName = 'array' ifFalse: [ ^ true ].
+	itemSchema := schema at: 'items' ifAbsent: [ ^ true ].
+	^ value allSatisfy: [ :item |
+		  self value: item matchesJsonSchema: itemSchema ]
+]
+
+{ #category : 'mcp - tools' }
+GenieServer >> value: value matchesJsonSchemaType: typeName [
+
+	typeName = 'string' ifTrue: [ ^ value isString ].
+	typeName = 'integer' ifTrue: [ ^ value isInteger ].
+	typeName = 'boolean' ifTrue: [
+		^ value == true or: [ value == false ] ].
+	typeName = 'array' ifTrue: [
+		^ (value isKindOf: SequenceableCollection) and: [
+			  value isString not ] ].
+	typeName = 'object' ifTrue: [ ^ value isKindOf: Dictionary ].
+	^ false
 ]
 
 { #category : 'private' }

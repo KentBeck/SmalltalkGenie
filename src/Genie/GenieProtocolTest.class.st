@@ -87,6 +87,70 @@ GenieProtocolTest >> testInitializeReturnsProtocolAndCapabilities [
 	self assert: ((result at: 'serverInfo') at: 'name') equals: 'genie'
 ]
 
+{ #category : 'tests - protocol validation' }
+GenieProtocolTest >> testInvalidJsonRpcVersionReturnsInvalidRequestError [
+
+	| response error |
+	response := GenieServer new handleMcpMessage: {
+			            ('jsonrpc' -> '1.0').
+			            ('method' -> 'ping').
+			            ('id' -> 7) } asDictionary.
+	error := response at: 'error'.
+	self assert: (error at: 'code') equals: -32600.
+	self assert: (response at: 'id') equals: 7
+]
+
+{ #category : 'tests - protocol validation' }
+GenieProtocolTest >> testMalformedJsonReturnsJsonRpcParseError [
+
+	| request response payload |
+	request := ZnRequest post: 'http://localhost/mcp'.
+	request entity: (ZnEntity text: '{not json').
+	response := GenieServer new handleMcpHttp: request.
+	payload := NeoJSONReader fromString: response entity contents.
+	self assert: response isSuccess.
+	self assert: ((payload at: 'error') at: 'code') equals: -32700.
+	self assert: (payload at: 'id') isNil
+]
+
+{ #category : 'tests - protocol validation' }
+GenieProtocolTest >> testMissingJsonRpcVersionReturnsInvalidRequestOverHttp [
+
+	| request response payload |
+	request := ZnRequest post: 'http://localhost/mcp'.
+	request entity: (ZnEntity text: '{"id":16,"method":"ping"}').
+	response := GenieServer new handleMcpHttp: request.
+	payload := NeoJSONReader fromString: response entity contents.
+	self assert: ((payload at: 'error') at: 'code') equals: -32600.
+	self assert: (payload at: 'id') equals: 16
+]
+
+{ #category : 'tests - protocol validation' }
+GenieProtocolTest >> testNonObjectJsonReturnsInvalidRequestError [
+
+	| request response payload |
+	request := ZnRequest post: 'http://localhost/mcp'.
+	request entity: (ZnEntity text: '[]').
+	response := GenieServer new handleMcpHttp: request.
+	payload := NeoJSONReader fromString: response entity contents.
+	self assert: response isSuccess.
+	self assert: ((payload at: 'error') at: 'code') equals: -32600.
+	self assert: (payload at: 'id') isNil
+]
+
+{ #category : 'tests - protocol validation' }
+GenieProtocolTest >> testNonObjectParamsReturnInvalidRequestOverHttp [
+
+	| request response payload |
+	request := ZnRequest post: 'http://localhost/mcp'.
+	request entity: (ZnEntity text:
+			 '{"jsonrpc":"2.0","id":13,"method":"ping","params":[]}').
+	response := GenieServer new handleMcpHttp: request.
+	payload := NeoJSONReader fromString: response entity contents.
+	self assert: ((payload at: 'error') at: 'code') equals: -32600.
+	self assert: (payload at: 'id') equals: 13
+]
+
 { #category : 'tests' }
 GenieProtocolTest >> testNotificationReturnsNil [
 	self assert: (GenieServer new handleMcpMessage:
@@ -167,6 +231,65 @@ GenieProtocolTest >> testRestartStartsReplacementServerOnce [
 		serverClass current: nil ]
 ]
 
+{ #category : 'tests - protocol validation' }
+GenieProtocolTest >> testToolCallRejectsMissingRequiredArgument [
+
+	| response error |
+	response := GenieServer new
+		            mcpToolsCall: {
+				            ('name' -> 'eval').
+				            ('arguments' -> Dictionary new) } asDictionary
+		            id: 11.
+	error := response at: 'error'.
+	self assert: (error at: 'code') equals: -32602.
+	self assert: (response at: 'id') equals: 11
+]
+
+{ #category : 'tests - protocol validation' }
+GenieProtocolTest >> testToolCallRejectsUnknownArgument [
+
+	| response |
+	response := GenieServer new
+		            mcpToolsCall: {
+				            ('name' -> 'eval').
+				            ('arguments' -> {
+					             ('code' -> '1 + 1').
+					             ('surprise' -> true) } asDictionary) } asDictionary
+		            id: 15.
+	self assert: ((response at: 'error') at: 'code') equals: -32602
+]
+
+{ #category : 'tests - protocol validation' }
+GenieProtocolTest >> testToolCallRejectsWrongArrayItemType [
+
+	| response error |
+	response := GenieServer new
+		            mcpToolsCall: {
+				            ('name' -> 'rename_method').
+				            ('arguments' -> {
+					             ('class_name' -> 'Object').
+					             ('method_name' -> 'printString').
+					             ('new_method_name' -> 'renderString').
+					             ('permutation' -> #( 'not-an-integer' )) }
+					             asDictionary) } asDictionary
+		            id: 12.
+	error := response at: 'error'.
+	self assert: (error at: 'code') equals: -32602
+]
+
+{ #category : 'tests - protocol validation' }
+GenieProtocolTest >> testToolCallRejectsWrongScalarArgumentType [
+
+	| response |
+	response := GenieServer new
+		            mcpToolsCall: {
+				            ('name' -> 'eval').
+				            ('arguments' -> { ('code' -> 42) } asDictionary) }
+				            asDictionary
+		            id: 14.
+	self assert: ((response at: 'error') at: 'code') equals: -32602
+]
+
 { #category : 'tests - security' }
 GenieProtocolTest >> testToolErrorsExposeDebugDetailsOnlyWhenExplicitlyEnabled [
 
@@ -194,6 +317,21 @@ GenieProtocolTest >> testToolErrorsHideSensitiveDebugDetailsByDefault [
 		((errorInfo at: 'description') includesSubstring: 'secret-marker').
 	self assert: (errorInfo includesKey: 'error_id').
 	self assert: (errorInfo at: 'type') equals: 'Error'
+]
+
+{ #category : 'tests - protocol validation' }
+GenieProtocolTest >> testToolSchemasDeclareClosedObjectsAndArrayItems [
+
+	| tools renameMethod schema properties |
+	tools := ((GenieServer new mcpToolsList: 1) at: 'result') at: 'tools'.
+	renameMethod := tools detect: [ :tool |
+		                (tool at: 'name') = 'rename_method' ].
+	schema := renameMethod at: 'inputSchema'.
+	properties := schema at: 'properties'.
+	self deny: (schema at: 'additionalProperties').
+	self
+		assert: (((properties at: 'permutation') at: 'items') at: 'type')
+		equals: 'integer'
 ]
 
 { #category : 'tests' }
