@@ -4,8 +4,7 @@ Class {
 	#instVars : [
 		'teapot',
 		'teapotConfig',
-		'settings',
-		'announcer'
+		'settings'
 	],
 	#classInstVars : [
 		'current'
@@ -1478,17 +1477,6 @@ GenieServer >> mcpInitialize: params id: anId [
 ]
 
 { #category : 'mcp tools' }
-GenieServer >> mcpMethodRefactoringTool: aName description: aDescription selector: aSelector properties: properties required: requiredNames [
-
-	^ self
-		  mcpTool: aName
-		  description: aDescription
-		  selector: aSelector
-		  properties: properties
-		  required: requiredNames
-]
-
-{ #category : 'mcp tools' }
 GenieServer >> mcpTool: aName description: aDesc selector: aSelector properties: propAssocs required: requiredNames [
 
 	| props |
@@ -1782,17 +1770,6 @@ GenieServer >> mcpToolsList: anId [
 	^ self jsonRpc: { ('tools' -> tools asArray) } asDictionary id: anId
 ]
 
-{ #category : 'mcp tools' }
-GenieServer >> mcpVariableRefactoringTool: aName description: aDescription selector: aSelector properties: properties required: requiredNames [
-
-	^ self
-		  mcpTool: aName
-		  description: aDescription
-		  selector: aSelector
-		  properties: properties
-		  required: requiredNames
-]
-
 { #category : 'method refactoring' }
 GenieServer >> messageSelectorFromMethodRefactoringRequest: request [
 
@@ -1837,7 +1814,7 @@ GenieServer >> methodRefactoringToolSpecs [
 
 	^ {
 		  (self
-			   mcpMethodRefactoringTool: 'extract_method'
+			   mcpTool: 'extract_method'
 			   description:
 			   'Extract the selected source interval into a new method.'
 			   selector: #handleExtractMethod:
@@ -1852,7 +1829,7 @@ GenieServer >> methodRefactoringToolSpecs [
 			   #( 'class_name' 'method_name' 'new_method_name'
 			      'start' 'stop' )).
 		  (self
-			   mcpMethodRefactoringTool: 'extract_method_and_occurrences'
+			   mcpTool: 'extract_method_and_occurrences'
 			   description:
 			   'Extract the selected source interval and matching occurrences into a new method.'
 			   selector: #handleExtractMethodAndOccurrences:
@@ -1867,7 +1844,7 @@ GenieServer >> methodRefactoringToolSpecs [
 			   #( 'class_name' 'method_name' 'new_method_name'
 			      'start' 'stop' )).
 		  (self
-			   mcpMethodRefactoringTool: 'extract_method_to_component'
+			   mcpTool: 'extract_method_to_component'
 			   description:
 			   'Extract the selected source interval, move the new method to a component, and inline the forwarder.'
 			   selector: #handleExtractMethodToComponent:
@@ -1884,7 +1861,7 @@ GenieServer >> methodRefactoringToolSpecs [
 				   #( 'class_name' 'method_name' 'new_method_name'
 				      'variable_name' 'start' 'stop' )).
 		  (self
-			   mcpMethodRefactoringTool: 'extract_setup_method'
+			   mcpTool: 'extract_setup_method'
 			   description: 'Extract the selected setup statements to setUp.'
 			   selector: #handleExtractSetupMethod:
 			   properties: {
@@ -1894,7 +1871,7 @@ GenieServer >> methodRefactoringToolSpecs [
 					   ('stop' -> 'integer') }
 			   required: #( 'class_name' 'method_name' 'start' 'stop' )).
 		  (self
-			   mcpMethodRefactoringTool: 'extract_setup_method_and_occurrences'
+			   mcpTool: 'extract_setup_method_and_occurrences'
 			   description:
 			   'Extract the selected setup statements and matching occurrences to setUp.'
 			   selector: #handleExtractSetupMethodAndOccurrences:
@@ -1905,7 +1882,7 @@ GenieServer >> methodRefactoringToolSpecs [
 					   ('stop' -> 'integer') }
 			   required: #( 'class_name' 'method_name' 'start' 'stop' )).
 		  (self
-			   mcpMethodRefactoringTool: 'inline_method'
+			   mcpTool: 'inline_method'
 			   description: 'Inline the selected message send in a method.'
 			   selector: #handleInlineMethod:
 			   properties: {
@@ -1915,7 +1892,7 @@ GenieServer >> methodRefactoringToolSpecs [
 					   ('stop' -> 'integer') }
 			   required: #( 'class_name' 'method_name' 'start' 'stop' )).
 		  (self
-			   mcpMethodRefactoringTool: 'inline_all_senders'
+			   mcpTool: 'inline_all_senders'
 			   description: 'Inline all senders of a method.'
 			   selector: #handleInlineAllSenders:
 			   properties: {
@@ -1923,7 +1900,7 @@ GenieServer >> methodRefactoringToolSpecs [
 					   ('method_name' -> 'string') }
 			   required: #( 'class_name' 'method_name' )).
 		  (self
-			   mcpMethodRefactoringTool: 'move_method'
+			   mcpTool: 'move_method'
 			   description:
 			   'Move a method to the class indicated by a variable, argument, or class reference.'
 			   selector: #handleMoveMethod:
@@ -1937,7 +1914,7 @@ GenieServer >> methodRefactoringToolSpecs [
 					   ('variable_type_names' -> 'array') }
 			   required: #( 'class_name' 'method_name' 'variable_name' )).
 		  (self
-			   mcpMethodRefactoringTool: 'move_method_to_class'
+			   mcpTool: 'move_method_to_class'
 			   description:
 			   'Move an instance-side or class-side method to another class.'
 			   selector: #handleMoveMethodToClass:
@@ -1948,7 +1925,7 @@ GenieServer >> methodRefactoringToolSpecs [
 					   ('is_class_method' -> 'boolean') }
 			   required: #( 'class_name' 'method_name' 'target_class_name' )).
 		  (self
-			   mcpMethodRefactoringTool: 'move_method_to_class_side'
+			   mcpTool: 'move_method_to_class_side'
 			   description: 'Move an instance-side method to its class side.'
 			   selector: #handleMoveMethodToClassSide:
 			   properties: {
@@ -1956,7 +1933,7 @@ GenieServer >> methodRefactoringToolSpecs [
 					   ('method_name' -> 'string') }
 			   required: #( 'class_name' 'method_name' )).
 		  (self
-			   mcpMethodRefactoringTool: 'move_method_to_instance_side'
+			   mcpTool: 'move_method_to_instance_side'
 			   description: 'Move a class-side method to an instance side.'
 			   selector: #handleMoveMethodToInstanceSide:
 			   properties: {
@@ -1965,7 +1942,7 @@ GenieServer >> methodRefactoringToolSpecs [
 					   ('target_class_name' -> 'string') }
 			   required: #( 'class_name' 'method_name' )).
 		  (self
-			   mcpMethodRefactoringTool: 'pull_up_method'
+			   mcpTool: 'pull_up_method'
 			   description:
 			   'Pull one or more methods from a subclass to a superclass.'
 			   selector: #handlePullUpMethod:
@@ -1976,7 +1953,7 @@ GenieServer >> methodRefactoringToolSpecs [
 					   ('target_class_name' -> 'string') }
 			   required: #( 'class_name' 'method_name' )).
 		  (self
-			   mcpMethodRefactoringTool: 'push_down_method'
+			   mcpTool: 'push_down_method'
 			   description:
 			   'Push one or more methods from a superclass to subclasses.'
 			   selector: #handlePushDownMethod:
@@ -1987,7 +1964,7 @@ GenieServer >> methodRefactoringToolSpecs [
 					   ('target_class_names' -> 'array') }
 			   required: #( 'class_name' 'method_name' )).
 		  (self
-			   mcpMethodRefactoringTool: 'remove_methods_in_hierarchy'
+			   mcpTool: 'remove_methods_in_hierarchy'
 			   description: 'Remove methods from a class and its subclasses.'
 			   selector: #handleRemoveMethodsInHierarchy:
 			   properties: {
@@ -1996,7 +1973,7 @@ GenieServer >> methodRefactoringToolSpecs [
 					   ('method_names' -> 'array') }
 			   required: #( 'class_name' 'method_name' )).
 		  (self
-			   mcpMethodRefactoringTool: 'add_parameter'
+			   mcpTool: 'add_parameter'
 			   description: 'Add a parameter to a method and update senders.'
 			   selector: #handleAddParameter:
 			   properties: {
@@ -2011,7 +1988,7 @@ GenieServer >> methodRefactoringToolSpecs [
 				   #( 'class_name' 'method_name' 'new_method_name'
 				      'parameter_name' 'default_value' )).
 		  (self
-			   mcpMethodRefactoringTool: 'remove_parameter'
+			   mcpTool: 'remove_parameter'
 			   description:
 			   'Remove an unused parameter from a method and update senders.'
 			   selector: #handleRemoveParameter:
@@ -2022,7 +1999,7 @@ GenieServer >> methodRefactoringToolSpecs [
 					   ('new_method_name' -> 'string') }
 			   required: #( 'class_name' 'method_name' 'parameter_name' )).
 		  (self
-			   mcpMethodRefactoringTool: 'inline_parameter'
+			   mcpTool: 'inline_parameter'
 			   description:
 			   'Inline a parameter whose senders all pass the same literal value.'
 			   selector: #handleInlineParameter:
@@ -2032,7 +2009,7 @@ GenieServer >> methodRefactoringToolSpecs [
 					   ('parameter_name' -> 'string') }
 			   required: #( 'class_name' 'method_name' 'parameter_name' )).
 		  (self
-			   mcpMethodRefactoringTool: 'change_method_signature'
+			   mcpTool: 'change_method_signature'
 			   description:
 			   'Rename a method selector and optionally permute arguments while updating senders.'
 			   selector: #handleChangeMethodSignature:
@@ -2043,7 +2020,7 @@ GenieServer >> methodRefactoringToolSpecs [
 					   ('permutation' -> 'array') }
 			   required: #( 'class_name' 'method_name' 'new_method_name' )).
 		  (self
-			   mcpMethodRefactoringTool: 'deprecate_method'
+			   mcpTool: 'deprecate_method'
 			   description:
 			   'Insert a deprecation notice at the start of a method.'
 			   selector: #handleDeprecateMethod:
@@ -2053,7 +2030,7 @@ GenieServer >> methodRefactoringToolSpecs [
 					   ('new_method_name' -> 'string') }
 			   required: #( 'class_name' 'method_name' 'new_method_name' )).
 		  (self
-			   mcpMethodRefactoringTool: 'replace_message_send'
+			   mcpTool: 'replace_message_send'
 			   description:
 			   'Replace message sends of one selector with another selector.'
 			   selector: #handleReplaceMessageSend:
@@ -2069,7 +2046,7 @@ GenieServer >> methodRefactoringToolSpecs [
 			   required:
 			   #( 'class_name' 'message_selector' 'new_message_selector' )).
 		  (self
-			   mcpMethodRefactoringTool: 'remove_all_message_sends'
+			   mcpTool: 'remove_all_message_sends'
 			   description:
 			   'Remove all message sends of a selector inside one method.'
 			   selector: #handleRemoveAllMessageSends:
@@ -2079,7 +2056,7 @@ GenieServer >> methodRefactoringToolSpecs [
 					   ('message_selector' -> 'string') }
 			   required: #( 'class_name' 'method_name' 'message_selector' )).
 		  (self
-			   mcpMethodRefactoringTool: 'create_cascade'
+			   mcpTool: 'create_cascade'
 			   description:
 			   'Create a cascade from selected consecutive message sends.'
 			   selector: #handleCreateCascade:
@@ -2090,7 +2067,7 @@ GenieServer >> methodRefactoringToolSpecs [
 					   ('stop' -> 'integer') }
 			   required: #( 'class_name' 'method_name' 'start' 'stop' )).
 		  (self
-			   mcpMethodRefactoringTool: 'split_cascade'
+			   mcpTool: 'split_cascade'
 			   description: 'Split a cascade at the selected boundary.'
 			   selector: #handleSplitCascade:
 			   properties: {
@@ -2459,7 +2436,7 @@ GenieServer >> variableRefactoringToolSpecs [
 
 	^ {
 		  (self
-			   mcpVariableRefactoringTool: 'add_instance_variable'
+			   mcpTool: 'add_instance_variable'
 			   description: 'Add an instance variable to a class.'
 			   selector: #handleAddInstanceVariable:
 			   properties: {
@@ -2467,7 +2444,7 @@ GenieServer >> variableRefactoringToolSpecs [
 					   ('variable_name' -> 'string') }
 			   required: #( 'class_name' 'variable_name' )).
 		  (self
-			   mcpVariableRefactoringTool: 'remove_instance_variable'
+			   mcpTool: 'remove_instance_variable'
 			   description: 'Remove an instance variable from a class.'
 			   selector: #handleRemoveInstanceVariable:
 			   properties: {
@@ -2475,7 +2452,7 @@ GenieServer >> variableRefactoringToolSpecs [
 					   ('variable_name' -> 'string') }
 			   required: #( 'class_name' 'variable_name' )).
 		  (self
-			   mcpVariableRefactoringTool: 'rename_instance_variable'
+			   mcpTool: 'rename_instance_variable'
 			   description:
 			   'Rename an instance variable and update references.'
 			   selector: #handleRenameInstanceVariable:
@@ -2486,7 +2463,7 @@ GenieServer >> variableRefactoringToolSpecs [
 					   ('rename_accessors' -> 'boolean') }
 			   required: #( 'class_name' 'variable_name' 'new_variable_name' )).
 		  (self
-			   mcpVariableRefactoringTool: 'pull_up_instance_variable'
+			   mcpTool: 'pull_up_instance_variable'
 			   description:
 			   'Pull an instance variable from a subclass to its superclass.'
 			   selector: #handlePullUpInstanceVariable:
@@ -2495,7 +2472,7 @@ GenieServer >> variableRefactoringToolSpecs [
 					   ('variable_name' -> 'string') }
 			   required: #( 'class_name' 'variable_name' )).
 		  (self
-			   mcpVariableRefactoringTool: 'push_down_instance_variable'
+			   mcpTool: 'push_down_instance_variable'
 			   description:
 			   'Push an instance variable from a superclass to subclasses.'
 			   selector: #handlePushDownInstanceVariable:
@@ -2504,7 +2481,7 @@ GenieServer >> variableRefactoringToolSpecs [
 					   ('variable_name' -> 'string') }
 			   required: #( 'class_name' 'variable_name' )).
 		  (self
-			   mcpVariableRefactoringTool: 'add_class_variable'
+			   mcpTool: 'add_class_variable'
 			   description: 'Add a class variable to a class.'
 			   selector: #handleAddClassVariable:
 			   properties: {
@@ -2512,7 +2489,7 @@ GenieServer >> variableRefactoringToolSpecs [
 					   ('variable_name' -> 'string') }
 			   required: #( 'class_name' 'variable_name' )).
 		  (self
-			   mcpVariableRefactoringTool: 'remove_class_variable'
+			   mcpTool: 'remove_class_variable'
 			   description: 'Remove a class variable from a class.'
 			   selector: #handleRemoveClassVariable:
 			   properties: {
@@ -2520,7 +2497,7 @@ GenieServer >> variableRefactoringToolSpecs [
 					   ('variable_name' -> 'string') }
 			   required: #( 'class_name' 'variable_name' )).
 		  (self
-			   mcpVariableRefactoringTool: 'rename_class_variable'
+			   mcpTool: 'rename_class_variable'
 			   description: 'Rename a class variable and update references.'
 			   selector: #handleRenameClassVariable:
 			   properties: {
@@ -2529,7 +2506,7 @@ GenieServer >> variableRefactoringToolSpecs [
 					   ('new_variable_name' -> 'string') }
 			   required: #( 'class_name' 'variable_name' 'new_variable_name' )).
 		  (self
-			   mcpVariableRefactoringTool: 'pull_up_class_variable'
+			   mcpTool: 'pull_up_class_variable'
 			   description:
 			   'Pull a class variable from a subclass to its superclass.'
 			   selector: #handlePullUpClassVariable:
@@ -2538,7 +2515,7 @@ GenieServer >> variableRefactoringToolSpecs [
 					   ('variable_name' -> 'string') }
 			   required: #( 'class_name' 'variable_name' )).
 		  (self
-			   mcpVariableRefactoringTool: 'push_down_class_variable'
+			   mcpTool: 'push_down_class_variable'
 			   description:
 			   'Push a class variable from a superclass to subclasses.'
 			   selector: #handlePushDownClassVariable:
@@ -2547,7 +2524,7 @@ GenieServer >> variableRefactoringToolSpecs [
 					   ('variable_name' -> 'string') }
 			   required: #( 'class_name' 'variable_name' )).
 		  (self
-			   mcpVariableRefactoringTool: 'rename_shared_variable'
+			   mcpTool: 'rename_shared_variable'
 			   description: 'Rename a shared variable and update references.'
 			   selector: #handleRenameSharedVariable:
 			   properties: {
@@ -2556,7 +2533,7 @@ GenieServer >> variableRefactoringToolSpecs [
 					   ('new_variable_name' -> 'string') }
 			   required: #( 'class_name' 'variable_name' 'new_variable_name' )).
 		  (self
-			   mcpVariableRefactoringTool: 'remove_shared_variable'
+			   mcpTool: 'remove_shared_variable'
 			   description: 'Remove a shared variable from a class.'
 			   selector: #handleRemoveSharedVariable:
 			   properties: {
@@ -2564,7 +2541,7 @@ GenieServer >> variableRefactoringToolSpecs [
 					   ('variable_name' -> 'string') }
 			   required: #( 'class_name' 'variable_name' )).
 		  (self
-			   mcpVariableRefactoringTool: 'merge_instance_variable'
+			   mcpTool: 'merge_instance_variable'
 			   description:
 			   'Merge one instance variable into another instance variable.'
 			   selector: #handleMergeInstanceVariable:
@@ -2575,7 +2552,7 @@ GenieServer >> variableRefactoringToolSpecs [
 			   required:
 			   #( 'class_name' 'variable_name' 'target_variable_name' )).
 		  (self
-			   mcpVariableRefactoringTool: 'protect_instance_variable'
+			   mcpTool: 'protect_instance_variable'
 			   description:
 			   'Protect an instance variable by inlining direct accessor references.'
 			   selector: #handleProtectInstanceVariable:
@@ -2584,7 +2561,7 @@ GenieServer >> variableRefactoringToolSpecs [
 					   ('variable_name' -> 'string') }
 			   required: #( 'class_name' 'variable_name' )).
 		  (self
-			   mcpVariableRefactoringTool: 'generate_variable_accessor'
+			   mcpTool: 'generate_variable_accessor'
 			   description:
 			   'Generate accessor methods for one instance or class variable.'
 			   selector: #handleGenerateVariableAccessor:
@@ -2594,7 +2571,7 @@ GenieServer >> variableRefactoringToolSpecs [
 					   ('class_variable' -> 'boolean') }
 			   required: #( 'class_name' 'variable_name' )).
 		  (self
-			   mcpVariableRefactoringTool: 'generate_variable_accessors'
+			   mcpTool: 'generate_variable_accessors'
 			   description:
 			   'Generate accessor methods for all or selected instance/class variables.'
 			   selector: #handleGenerateVariableAccessors:
@@ -2604,7 +2581,7 @@ GenieServer >> variableRefactoringToolSpecs [
 					   ('variable_names' -> 'array') }
 			   required: #( 'class_name' )).
 		  (self
-			   mcpVariableRefactoringTool: 'generate_lazy_variable_accessor'
+			   mcpTool: 'generate_lazy_variable_accessor'
 			   description:
 			   'Generate a lazy-initializing accessor for one instance or class variable.'
 			   selector: #handleGenerateLazyVariableAccessor:
@@ -2615,7 +2592,7 @@ GenieServer >> variableRefactoringToolSpecs [
 					   ('default_value' -> 'string') }
 			   required: #( 'class_name' 'variable_name' 'default_value' )).
 		  (self
-			   mcpVariableRefactoringTool: 'temporary_to_instance_variable'
+			   mcpTool: 'temporary_to_instance_variable'
 			   description:
 			   'Convert a temporary variable in a method to an instance variable.'
 			   selector: #handleTemporaryToInstanceVariable:
@@ -2625,7 +2602,7 @@ GenieServer >> variableRefactoringToolSpecs [
 					   ('variable_name' -> 'string') }
 			   required: #( 'class_name' 'method_name' 'variable_name' )).
 		  (self
-			   mcpVariableRefactoringTool: 'extract_temporary'
+			   mcpTool: 'extract_temporary'
 			   description:
 			   'Extract a selected expression to a temporary variable. Uses 1-based start/stop source indexes.'
 			   selector: #handleExtractTemporary:
@@ -2638,7 +2615,7 @@ GenieServer >> variableRefactoringToolSpecs [
 			   required:
 			   #( 'class_name' 'method_name' 'variable_name' 'start' 'stop' )).
 		  (self
-			   mcpVariableRefactoringTool: 'inline_temporary'
+			   mcpTool: 'inline_temporary'
 			   description:
 			   'Inline a selected temporary variable. Uses 1-based start/stop source indexes.'
 			   selector: #handleInlineTemporary:
@@ -2649,7 +2626,7 @@ GenieServer >> variableRefactoringToolSpecs [
 					   ('stop' -> 'integer') }
 			   required: #( 'class_name' 'method_name' 'start' 'stop' )).
 		  (self
-			   mcpVariableRefactoringTool: 'rename_argument_or_temporary'
+			   mcpTool: 'rename_argument_or_temporary'
 			   description:
 			   'Rename an argument or temporary selected by 1-based start/stop source indexes.'
 			   selector: #handleRenameArgumentOrTemporary:
@@ -2663,7 +2640,7 @@ GenieServer >> variableRefactoringToolSpecs [
 			   #( 'class_name' 'method_name' 'new_variable_name'
 			      'start' 'stop' )).
 		  (self
-			   mcpVariableRefactoringTool: 'remove_unused_temporary'
+			   mcpTool: 'remove_unused_temporary'
 			   description: 'Remove unused temporary variables from a method.'
 			   selector: #handleRemoveUnusedTemporary:
 			   properties: {
@@ -2671,7 +2648,7 @@ GenieServer >> variableRefactoringToolSpecs [
 					   ('method_name' -> 'string') }
 			   required: #( 'class_name' 'method_name' )).
 		  (self
-			   mcpVariableRefactoringTool:
+			   mcpTool:
 			   'move_variable_definition_to_smallest_scope'
 			   description:
 			   'Move a selected variable definition to its smallest valid scope. Uses 1-based start/stop source indexes.'
