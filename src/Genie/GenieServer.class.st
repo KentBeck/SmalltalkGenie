@@ -194,7 +194,10 @@ GenieServer >> createTeapot [
 
 { #category : 'security' }
 GenieServer >> dangerousToolNames [
-	^ #('eval' 'save_image' 'remove_class' 'remove_method')
+	"Treat every tool as dangerous unless it is explicitly read-only."
+
+	^ (self allMcpToolSpecs collect: [ :spec | spec at: 'name' ])
+		  reject: [ :toolName | self readOnlyToolNames includes: toolName ]
 ]
 
 { #category : 'private' }
@@ -251,6 +254,12 @@ GenieServer >> executeVariableRefactoring: refactoring tool: toolName request: r
 		  variableRefactoringResultForTool: toolName
 		  request: request
 		  variables: variableNames
+]
+
+{ #category : 'security' }
+GenieServer >> exposeDebugErrors [
+
+	^ self settings at: #exposeDebugErrors ifAbsent: [ false ]
 ]
 
 { #category : 'private' }
@@ -2020,12 +2029,21 @@ GenieServer >> newArgumentsFromMethodRefactoringRequest: request [
 
 { #category : 'security' }
 GenieServer >> originAllowed: aHeaders [
-	"Defense-in-depth against browser DNS-rebinding: reject a non-local Origin.
-	 Requests with no Origin header (curl, MCP clients) pass; the auth token is the real gate."
-	| origin |
-	origin := (aHeaders includesKey: 'Origin') ifTrue: [ aHeaders at: 'Origin' ] ifFalse: [ nil ].
+	"Reject browser requests unless Origin has an exact loopback hostname.
+	 Requests without Origin are non-browser MCP clients and remain allowed."
+
+	| origin url host |
+	origin := (aHeaders includesKey: 'Origin')
+		          ifTrue: [ aHeaders at: 'Origin' ]
+		          ifFalse: [ nil ].
 	origin ifNil: [ ^ true ].
-	^ (origin includesSubstring: 'localhost') or: [ origin includesSubstring: '127.0.0.1' ]
+	url := [ ZnUrl fromString: origin ]
+		       on: Error
+		       do: [ ^ false ].
+	host := url host.
+	host ifNil: [ ^ false ].
+	^ #( 'localhost' '127.0.0.1' '::1' ) includes:
+		  host asString asLowercase
 ]
 
 { #category : 'accessing' }
@@ -2072,6 +2090,18 @@ GenieServer >> pullUpTargetFor: aClass variable: variableName classVariable: cla
 	^ targetClass
 ]
 
+{ #category : 'security' }
+GenieServer >> readOnlyToolNames [
+	"Tools explicitly allowed when dangerous operations are disabled.
+	 New tools fail closed until added to this allowlist."
+
+	^ #( 'list_packages' 'list_classes' 'list_methods' 'list_extended_classes'
+	     'get_class_source' 'get_method_source' 'get_class_comment'
+	     'search_classes_like' 'search_methods_like'
+	     'search_implementors' 'search_references' 'search_references_to_class'
+	     'search_traits_like' 'get_settings' )
+]
+
 { #category : 'private' }
 GenieServer >> receiverErrorInfoFrom: receiverObject [
 	| receiverErrorInfo values |
@@ -2086,12 +2116,21 @@ GenieServer >> receiverErrorInfoFrom: receiverObject [
 
 { #category : 'private' }
 GenieServer >> returnError: anError by: resultDict [
+
 	| errorInfo signalerContext |
 	errorInfo := Dictionary new.
-	errorInfo at: 'description' put: anError description.
-	signalerContext := anError signalerContext.
-	errorInfo at: 'stack_trace' put: (String streamContents: [:strm | signalerContext debugStack: self stackSize on: strm]).
-	errorInfo at: 'receiver' put: (self receiverErrorInfoFrom: signalerContext receiver).
+	errorInfo
+		at: 'description' put: 'Tool execution failed';
+		at: 'type' put: anError class name asString;
+		at: 'error_id' put: UUID new asString.
+	self exposeDebugErrors ifTrue: [
+			errorInfo at: 'description' put: anError description.
+			signalerContext := anError signalerContext.
+			errorInfo
+				at: 'stack_trace' put: (String streamContents: [ :stream |
+							 signalerContext debugStack: self stackSize on: stream ]);
+				at: 'receiver'
+				put: (self receiverErrorInfoFrom: signalerContext receiver) ].
 	resultDict at: 'error' put: errorInfo.
 	^ resultDict
 ]

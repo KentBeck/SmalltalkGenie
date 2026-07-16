@@ -35,11 +35,13 @@ GenieSettings >> at: aKey put: aValue [
 
 { #category : 'initialization' }
 GenieSettings >> initializeDefaults [
+
 	data := Dictionary new.
 	data at: #stackSize put: 100.
 	data at: #bindingInterface put: '127.0.0.1'.
 	data at: #authToken put: ''.
 	data at: #allowDangerousTools put: true.
+	data at: #exposeDebugErrors put: false.
 	^ self
 ]
 

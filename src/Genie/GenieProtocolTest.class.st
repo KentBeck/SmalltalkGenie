@@ -29,6 +29,30 @@ GenieProtocolTest >> testBindingDefaultsToLoopback [
 	self assert: allIfaces bindingAddress isNil
 ]
 
+{ #category : 'tests - security' }
+GenieProtocolTest >> testDangerousToolGateBlocksAllNonReadOnlyTools [
+
+	| server mutationToolNames response |
+	server := GenieServer new.
+	mutationToolNames := #( 'define_class' 'define_method'
+	                        'rename_method' 'import_package'
+	                        'install_project' 'apply_settings'
+	                        'run_test' ).
+	mutationToolNames do: [ :toolName |
+		self assert: (server dangerousToolNames includes: toolName) ].
+	self deny: (server dangerousToolNames includes: 'list_packages').
+	server settings at: #allowDangerousTools put: false.
+	server dangerousToolNames do: [ :toolName |
+			response := server
+				            mcpToolsCall: {
+						            ('name' -> toolName).
+						            ('arguments' -> Dictionary new) } asDictionary
+				            id: 1.
+			self
+				assert: (response includesKey: 'error')
+				description: toolName , ' was not blocked' ]
+]
+
 { #category : 'tests' }
 GenieProtocolTest >> testDangerousToolGateBlocksWhenDisabled [
 	| server blocked allowed |
@@ -79,6 +103,19 @@ GenieProtocolTest >> testOriginCheckAllowsLocalRejectsRemote [
 	self deny: (server originAllowed: { 'Origin' -> 'http://evil.example.com' } asDictionary)
 ]
 
+{ #category : 'tests - security' }
+GenieProtocolTest >> testOriginCheckRejectsHostNameSpoofing [
+
+	| server |
+	server := GenieServer new.
+	self deny: (server originAllowed:
+			 { ('Origin' -> 'http://localhost.evil.example') } asDictionary).
+	self deny: (server originAllowed:
+			 { ('Origin' -> 'https://evil.example/?localhost') } asDictionary).
+	self deny: (server originAllowed:
+			 { ('Origin' -> 'http://127.0.0.1.evil.example') } asDictionary)
+]
+
 { #category : 'tests' }
 GenieProtocolTest >> testRefactoringToolsUseDedicatedHandlers [
 
@@ -111,6 +148,35 @@ GenieProtocolTest >> testRenameMethodToolSchemaHasRequiredFields [
 	self
 		assert: ((properties at: 'permutation') at: 'type')
 		equals: 'array'
+]
+
+{ #category : 'tests - security' }
+GenieProtocolTest >> testToolErrorsExposeDebugDetailsOnlyWhenExplicitlyEnabled [
+
+	| server result errorInfo |
+	server := GenieServer new.
+	server settings at: #exposeDebugErrors put: true.
+	result := server returnResultDo: [ Error signal: 'debug-marker' ].
+	errorInfo := result at: 'error'.
+	self assert:
+		((errorInfo at: 'description') includesSubstring: 'debug-marker').
+	self assert: (errorInfo includesKey: 'stack_trace').
+	self assert: (errorInfo includesKey: 'receiver')
+]
+
+{ #category : 'tests - security' }
+GenieProtocolTest >> testToolErrorsHideSensitiveDebugDetailsByDefault [
+
+	| result errorInfo |
+	result := GenieServer new returnResultDo: [
+		          Error signal: 'secret-marker' ].
+	errorInfo := result at: 'error'.
+	self deny: (errorInfo includesKey: 'stack_trace').
+	self deny: (errorInfo includesKey: 'receiver').
+	self deny:
+		((errorInfo at: 'description') includesSubstring: 'secret-marker').
+	self assert: (errorInfo includesKey: 'error_id').
+	self assert: (errorInfo at: 'type') equals: 'Error'
 ]
 
 { #category : 'tests' }
