@@ -12,5 +12,6 @@ BaselineOfGenie >> baseline: spec [
 		spec
 			baseline: 'Teapot' with: [ spec repository: 'github://zeroflag/Teapot:master/source' ];
 			baseline: 'NeoJSON' with: [ spec repository: 'github://svenvc/NeoJSON:master/repository' ].
-		spec package: 'Genie' with: [ spec requires: #('Teapot' 'NeoJSON') ] ]
+		spec package: 'Genie' with: [ spec requires: #('Teapot' 'NeoJSON') ].
+		spec package: 'Genie-MemoryLoad' ]
 ]

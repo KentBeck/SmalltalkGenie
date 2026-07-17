@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# memory-load-bench — drive GenieMemoryLoadBenchmark tiers on a prepared image.
+#
+# The image must already contain Genie-MemoryLoad (see docs/memory-load.md).
+# Each rep runs in a FRESH copy of the prepared image so runs are independent,
+# and each rep is a fresh VM launch so GC state starts clean.
+#
+# Usage:
+#   scripts/memory-load-bench <pharo-vm> <prepared.image> <bytes> [<bytes> ...]
+# Example (1 GiB and 10 GiB tiers):
+#   scripts/memory-load-bench ~/pharo/pharo bench.image 1073741824 10737418240
+#
+# Environment:
+#   REPS=5              repetitions per tier
+#   MODE=smallObjects   or byteArrays
+#   SNAPSHOT=true       false skips the snapshot phase (no huge files written)
+#   WORKDIR=<mktemp>    where the per-run image copy lives — PUT THIS ON THE
+#                       FAST LOCAL DISK; snapshot time is mostly disk write.
+#   OUT=results.jsonl   file collecting the JSON result lines
+#   DROP_CACHES=false   true drops the page cache (needs root) before the
+#                       cold-start launch so it reads the snapshot from disk.
+set -euo pipefail
+
+if [ $# -lt 3 ]; then
+	sed -n '2,22p' "$0"
+	exit 64
+fi
+
+VM=$1
+IMAGE=$2
+shift 2
+
+REPS=${REPS:-5}
+MODE=${MODE:-smallObjects}
+SNAPSHOT=${SNAPSHOT:-true}
+WORKDIR=${WORKDIR:-$(mktemp -d)}
+OUT=${OUT:-results.jsonl}
+DROP_CACHES=${DROP_CACHES:-false}
+
+CHANGES="${IMAGE%.image}.changes"
+
+for BYTES in "$@"; do
+	for REP in $(seq "$REPS"); do
+		cp "$IMAGE" "$WORKDIR/bench.image"
+		[ -f "$CHANGES" ] && cp "$CHANGES" "$WORKDIR/bench.changes"
+		echo "== tier=$BYTES rep=$REP mode=$MODE snapshot=$SNAPSHOT =="
+		/usr/bin/time -v "$VM" --headless "$WORKDIR/bench.image" \
+			eval "GenieMemoryLoadBenchmark runTierBytes: $BYTES mode: #$MODE snapshot: $SNAPSHOT" \
+			2>&1 | tee -a "$OUT"
+		if [ "$SNAPSHOT" = "true" ]; then
+			ls -l "$WORKDIR/bench.image"
+			if [ "$DROP_CACHES" = "true" ]; then
+				sync && sysctl -q vm.drop_caches=3
+			fi
+			# Cold start of the fat snapshot. The resumed image detects the
+			# resume, prints {"resumedFromSnapshot":true} and quits, so this
+			# measures map-in + startup, not a rerun of the benchmark tail.
+			START=$(date +%s%N)
+			"$VM" --headless "$WORKDIR/bench.image" eval "true" > /dev/null 2>&1 || true
+			END=$(date +%s%N)
+			echo "{\"coldStartMs\":$(((END - START) / 1000000)),\"tierBytes\":$BYTES,\"rep\":$REP}" | tee -a "$OUT"
+		fi
+		rm -f "$WORKDIR/bench.image" "$WORKDIR/bench.changes"
+	done
+done
+echo "results collected in $OUT"
