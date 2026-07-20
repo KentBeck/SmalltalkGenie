@@ -39,12 +39,21 @@ DROP_CACHES=${DROP_CACHES:-false}
 
 CHANGES="${IMAGE%.image}.changes"
 
+# GNU time reports max RSS; fall back to running bare where it's not installed.
+TIME_CMD=()
+[ -x /usr/bin/time ] && TIME_CMD=(/usr/bin/time -v)
+
+# The .sources file must sit next to the image copy or Pharo warns on startup.
+for SOURCES in "$(dirname "$IMAGE")"/*.sources; do
+	[ -f "$SOURCES" ] && cp -n "$SOURCES" "$WORKDIR/" 2> /dev/null || true
+done
+
 for BYTES in "$@"; do
 	for REP in $(seq "$REPS"); do
 		cp "$IMAGE" "$WORKDIR/bench.image"
 		[ -f "$CHANGES" ] && cp "$CHANGES" "$WORKDIR/bench.changes"
 		echo "== tier=$BYTES rep=$REP mode=$MODE snapshot=$SNAPSHOT =="
-		/usr/bin/time -v "$VM" --headless "$WORKDIR/bench.image" \
+		"${TIME_CMD[@]}" "$VM" --headless "$WORKDIR/bench.image" \
 			eval "GenieMemoryLoadBenchmark runTierBytes: $BYTES mode: #$MODE snapshot: $SNAPSHOT" \
 			2>&1 | tee -a "$OUT"
 		if [ "$SNAPSHOT" = "true" ]; then

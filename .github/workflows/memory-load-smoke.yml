@@ -1,0 +1,57 @@
+# Smoke test for the Genie-MemoryLoad harness: prove the whole pipeline works
+# at a size a standard runner can hold (1 GiB), before renting big iron for
+# the 100 GB / 1 TB tiers (see docs/memory-load.md).
+name: memory-load-smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/pharo-memory-load-tests-77yjg1']
+    paths:
+      - 'src/**'
+      - 'scripts/memory-load-bench'
+      - '.github/workflows/memory-load-smoke.yml'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Pharo (13, falling back to 12)
+        run: |
+          (curl -fsSL https://get.pharo.org/64/130+vm || curl -fsSL https://get.pharo.org/64/120+vm) | bash
+          ls -l Pharo.image
+
+      - name: Load Genie baseline from this branch
+        run: |
+          ./pharo --headless Pharo.image eval "
+            (Smalltalk at: #Author ifAbsent: [ nil ]) ifNotNil: [ :author | author fullName: 'CI' ].
+            Metacello new
+              baseline: 'Genie';
+              repository: 'tonel://$PWD/src';
+              load.
+            Smalltalk snapshot: true andQuit: true"
+
+      - name: Run Genie-MemoryLoad unit tests
+        run: |
+          ./pharo --headless Pharo.image eval "
+            | result |
+            result := GenieMemoryLoadBenchmarkTest buildSuite run.
+            Transcript show: result asString; cr; flush.
+            result hasPassed ifFalse: [ Smalltalk exit: 1 ]"
+
+      - name: Smoke tier — 1 GiB smallObjects, snapshot + cold start
+        run: REPS=1 OUT=results.jsonl scripts/memory-load-bench ./pharo Pharo.image 1073741824
+
+      - name: Smoke tier — 1 GiB byteArrays, allocation only
+        run: REPS=1 MODE=byteArrays SNAPSHOT=false OUT=results.jsonl scripts/memory-load-bench ./pharo Pharo.image 1073741824
+
+      - name: Show collected results
+        run: grep -h '^{' results.jsonl || cat results.jsonl
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: memory-load-results
+          path: results.jsonl
